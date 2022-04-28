@@ -95,12 +95,10 @@ Rarity Estimation:
 Error Evalution:
     
 Iterative tuning:
-=======
-# create-manifests
-
-## create manifest files for tuttle twins season 01 episodes
-
-## Use manifest files to prepare s3 directory image dataset for Tensorflow image classification 
+    
+    
+    
+Data Preparation Notes
 
 Tensorflow image classification requires preparation of an image dataset in s3 with this structure:
 s3://dst_bucket/dst_folder/class_tag/jpg_file
@@ -109,10 +107,34 @@ Millions of pre-processed src_jpg_files have already been uploaded to s3://src_b
 Each src_jpg_file has already been manually classified with a single enumerated class_tag.
 Each jsonline in a manifest_file describes the s3://src_bucket/src_folder/src_key and class_tag for a given src_jpg_file.
 
-In order to efficiently copy the src_jpg_files would it be possible to loop thru each class_tag and use an s3 batch copy job to copy matching src_jpg_files to their proper s3://dst_bucket/dst_folder/class_tag/jpg_file destination?
+Each jpg file must be copied from its current source location 
+	s3://<src-bucket>/bucket/<src-key> where <src-key> = <src-folder>/<file>.jpg 
 
-aws s3 sync s3://src_bucket/src_path/ s3://dst_bucket/dst_path/class --filter tag=class
+to its destination location 
+	s3://<dst-bucket>/<dst-key> where <dst-key> = <dst-folder>/<category>/<file>.jpg 
 
-Or would it be simpler to just use `aws s3 cp` to individually copy each src_jpg_file to its target s3 destination?
+Proposed solutions:
+    
+1. Use `aws s3 cp` to individually copy each src_jpg_file to its target s3 destination
+
+However, it is preferable to do this without incurring the I/O overhead (and cost) of reading/writing each s3 object individually.
+    
+2. Create 5 different manifests and 5 different s3 sync copy jobs, one for each category, to move the items over.
+
+
+Reclassification Notes
+
+The NFT team is storing manual classification of each image using a Google Drive spreadsheets for each episode. New images can be added and old images may be re-classified at any time.
+    
+An automated process is needed to detect and handle these changes.
+    
+At scheduled times, fetch each episode manifest file and compare it with its previous version
+
+Copy each new source image to its destination
+    
+Copy each source image with an updated classification to its new destination and then delete the source image from its old location
+
+
+
 
 
