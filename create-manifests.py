@@ -4,6 +4,7 @@ import gspread
 import os
 import time
 import json
+from datetime import datetime
 
 # Create a new Google Cloud project
 # Go to https://console.developers.google.com/
@@ -33,88 +34,119 @@ import json
 # Click "Share anyway" link
 # Click "Copy link" and set share_link variable to this url 
 
+# Create the utc_datetime_iso manifest file
+# Upload it to s3://bucket/tuttle-twins-season-episode-manifests/
+
 def count_lines(filename) :
     with open(filename, 'r') as fp:
         num_lines = sum(1 for line in fp)
     return num_lines
 
-def process_episode(credentials_file, episode):
+def create_episode_manifest_file(google_credentials_file, episode):
+    '''
+    read the google sheet for this episode into a df
+    compute and keep only columns 'src-ref' and 'class'
+    save this episode's df as a manifest.jl file 
+    '''
 
+    # get attributes from episode object
     share_link = episode["share_link"]
     manifest_file = episode["manifest_file"]
     spreadsheet_url = episode["spreadsheet_url"]
 
-    gc = gspread.service_account(filename=credentials_file)
+    # verify manifest file has '.jl' json lines extension
+    if not manifest_file.endswith(".jl"):
+        raise Exception("episode manifest_file:" + manifest_file + " requires '.jl' json lines extension")
+
+    # verify manifest file has substring "<utc_datetime_iso>"
+    if manifest_file.find("<utc_datetime_iso>") == -1:
+        raise Exception("episode manifest_file:" + manifest_file + " requires replaceable <utc_datetime_iso> substring")
+
+    # replace <utc_datetime_iso> with the current value, e.g. '2022-04-28T10:43:48.733843'
+    utc_datetime_iso = datetime.now().isoformat()
+    manifest_file = manifest_file.replace("<utc_datetime_iso>", utc_datetime_iso)
+
+    # use the google credentials file and the episode's share_link to read
+    # the raw contents of the first sheet into df
+    gc = gspread.service_account(filename=google_credentials_file)
     gsheet = gc.open_by_url(share_link)
     data = gsheet.sheet1.get_all_records()
-
     df = pd.DataFrame(data)
+
     num_rows = df.shape[0]
     # df.info(verbose=True)
     # df.describe(include='all')
-
     print(f"input spread_sheet_url:{spreadsheet_url} num_rows:{num_rows}")
 
-    thumbnails_base = df.columns[0]
-    stamps_base = thumbnails_base.replace("thumbnails","stamps")
-    df['src-ref'] = stamps_base + df["FRAME NUMBER"] + ".jpg"
+    # fetch the 's3_thumbnails_base_url' from the name of column zero, e.g.
+    #   https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/
+    s3_thumbnails_base_url = df.columns[0]
+
+    # verify that s3_thumbnails_base_url contains 'episode_base_code', e.g. 
+    #   "s01e01"
+    episode_base_code = episode["season"].lower() + episode["episode"].lower()
+    if s3_thumbnails_base_url.find(episode_base_code) == -1:
+        raise Exception(f"s3_thumbnails_base_url fails to include 'episode_base_code': {episode_base_code}")
+
+    # convert the s3_thumbnails_base_url into the s3_stamps_base_url
+    s3_stamps_base_url = s3_thumbnails_base_url.replace("thumbnails","stamps")  
+
+    # verify that all rows of the "FRAME NUMBER" column contain 'episode_frame_code', e.g. 
+    #   "TT_S01_E01_FRM"  
+    # example FRAME_NUMBER column: 
+    #   "TT_S01_E01_FRM-00-00-08-11"
+    episode_frame_code = "TT_" + episode["season"].upper() + "_" + episode["episode"].upper() + "_FRM"
+
+    # compute the Series that tracks whether each row's "FRAME NUMBER" column contain 'episode_frame_code'
+    contains_series = df.loc[df['FRAME NUMBER'].str.contains(episode_frame_code, case=False)]
+    failure_count = len(contains_series.filter(False))
+    if failure_count > 0:
+        raise Exception(f"{failure_count} rows have FRAME NUMBER values that fail to include 'episode_frame_code': {episode_frame_code}" )
+
+    # compute the "src-ref" column of each row using the s3_stamps_base_url and the "FRAME_NUMBER" of that row
+    df['src-ref'] = s3_stamps_base_url + df["FRAME NUMBER"] + ".jpg"
+
+    # compute the "class" column of each row as the first available "CLASSIFICATION" for that row or None
     df['class'] = \
         np.where(df["JONNY's RECLASSIFICATION"].str.len() > 0, df["JONNY's RECLASSIFICATION"],
         np.where(df["SUPERVISED CLASSIFICATION"].str.len() > 0, df["SUPERVISED CLASSIFICATION"],
         np.where(df["UNSUPERVISED CLASSIFICATION"].str.len() > 0, df["UNSUPERVISED CLASSIFICATION"], None)))
 
+    # drop all columns except these 
     df = df[['src-ref','class']]
 
-    epoch_time_in_seconds = time.time()
-    tmpfile = f"tmpfile-{epoch_time_in_seconds}.jl"
+    # convert df to a list of dicts, one for each row
+    df_list_of_row_dicts = df.to_dict('records')
 
-    with open(tmpfile, "w") as f:
-        print(df.to_json(orient='records', lines=True),file=f, flush=False)
-
-    with open(manifest_file, "w") as w:  
-        with open(tmpfile, "r") as r:
-            lines = r.readlines()
-            for line in lines:
-                w.writelines([line.replace("\\/","/")])
+    # write each row_dist to the manifest_file as a flat row_json_str
+    with open(manifest_file, "w") as w: 
+        for row_dict in df_list_of_row_dicts:
+            row_json_str = json.dumps(row_dict)
+            # row_json_str = row_json_str.replace("\\/","/")
+            w.writelines(row_json_str)
     
-    os.remove(tmpfile)
-
     num_lines = count_lines(manifest_file)
-    print(f"output manifest_file:{manifest_file} num_lines:{num_lines}")
+    print(f"output episode manifest_file:{manifest_file} num_lines:{num_lines}")
 
 
-# pseudo-global variables
-project_name = "My Project 46604"
-project_id = "planar-outlook-348318"
-project_number = "591253385669"
-project_location = "angel.com"
-service_account_email = "shawn-becker-pyspark@planar-outlook-348318.iam.gserviceaccount.com"
-credentials_file = "/Users/shawnbecker-mbp/Google Drive/My Drive/Google Cloud Platform/gsheets-pyshark-348317-2b9d25a0fa1e.json"
+# This JSON file is created manually by members of the Angel Studios Data team.
+# See the README file for instructions
+google_credentials_file = "./credentials/gsheets-pyshark-348317-2b9d25a0fa1e.json"
 
-# tt_s01_episodes = [
-#    {
-#        "season": "S01",
-#        "episode": "E01",
-#        "spreadsheet_title": "Tuttle Twins S01E01 Unsupervised Clustering", 
-#        "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184", 
-#        "share_link": "https://docs.google.com/spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit?usp=sharing",
-#        "manifest_file": "S01E01-manifest.jl"
-#    },
-#    {
-#        "season": "S01",
-#        "episode": "E02",
-#        "spreadsheet_title": "Tuttle Twins S01E02 Unsupervised Clustering",
-#        "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
-#        "share_link": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing",
-#        "manifest_file": "S01E02-manifest.jl"
-#    }
-# ]
+# Each season_episode_file, e.g. "S01-episodes.json" describes the parameters 
+# used to create episode_manifest files for all of its episodes.
 
-episodes_json_file = "tuttle-twins-S01-episodes.json"
-with open(episodes_json_file,"r") as f:
-    tt_s01_episodes = json.load(f)
-    for episode in tt_s01_episodes:
-        process_episode(credentials_file, episode)
+# These JSON files are created manually by members of the Angel Studios Data team
+season_episode_files = [
+    "season_episodes/S01-episodes.json"
+]
+
+# create an episode manifest file for all episodes in all seasons
+for season_episode_file in season_episode_files:
+    with open(season_episode_file,"r") as f:
+        season_episodes = json.load(f)
+        for episode in season_episodes:
+            create_episode_manifest_file(google_credentials_file, episode)
 
 
 
