@@ -5,7 +5,7 @@
         "spreadsheet_title": "Tuttle Twins S01E01 Unsupervised Clustering", 
         "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184", 
         "share_link": "https://docs.google.com/spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit?usp=sharing",
-        "manifest_file": "manifests/S01E01-manifest-<utc_datetime_iso>.jl"
+        "manifest_file": "S01E01-manifest-<utc_datetime_iso>.jl"
     },
     {
         "season": "S01",
@@ -13,6 +13,6 @@
         "spreadsheet_title": "Tuttle Twins S01E02 Unsupervised Clustering",
         "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
         "share_link": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing",
-        "manifest_file": "manifests/S01E02-manifest-<utc_datetime_iso>.jl"
+        "manifest_file": "S01E02-manifest-<utc_datetime_iso>.jl"
     }
  ]
