@@ -6,6 +6,8 @@ import time
 import json
 from datetime import datetime
 
+manifest_directory_path = "manifests"
+
 # Create a new Google Cloud project
 # Go to https://console.developers.google.com/
 # Click "create a new project" link named "gsheets-pyshark"
@@ -118,16 +120,20 @@ def create_episode_manifest_file(google_credentials_file, episode):
     # convert df to a list of dicts, one for each row
     df_list_of_row_dicts = df.to_dict('records')
 
+    # write all rows of manifest_file to a json lines file under manifest_directory_path
+    if not os.path.exists(manifest_directory_path):
+        os.makedirs(manifest_directory_path)
+
+    manifest_path = f"{manifest_directory_path}/{manifest_file}"
     # write each row_dist to the manifest_file as a flat row_json_str
-    with open(manifest_file, "w") as w: 
+    with open(manifest_path, "w") as w: 
         for row_dict in df_list_of_row_dicts:
             row_json_str = json.dumps(row_dict)
             # row_json_str = row_json_str.replace("\\/","/")
             w.writelines(row_json_str)
     
-    num_lines = count_lines(manifest_file)
-    print(f"output episode manifest_file:{manifest_file} num_lines:{num_lines}")
-
+    num_lines = count_lines(manifest_path)
+    print(f"output episode manifest_path:{manifest_path} num_lines:{num_lines}")
 
 # This JSON file is created manually by members of the Angel Studios Data team.
 # See the README file for instructions
