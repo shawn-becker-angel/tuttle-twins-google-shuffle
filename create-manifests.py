@@ -99,9 +99,9 @@ def create_episode_manifest_file(google_credentials_file, episode):
     #   "TT_S01_E01_FRM-00-00-08-11"
     episode_frame_code = "TT_" + episode["season"].upper() + "_" + episode["episode"].upper() + "_FRM"
 
-    # compute the Series that tracks whether each row's "FRAME NUMBER" column contain 'episode_frame_code'
-    contains_series = df.loc[df['FRAME NUMBER'].str.contains(episode_frame_code, case=False)]
-    failure_count = len(contains_series.filter(False))
+    # verify that "FRAME NUMBER" column of all rows contain 'episode_frame_code'
+    matches = df[df['FRAME NUMBER'].str.contains(episode_frame_code, case=False)]
+    failure_count = len(df) - len(matches)
     if failure_count > 0:
         raise Exception(f"{failure_count} rows have FRAME NUMBER values that fail to include 'episode_frame_code': {episode_frame_code}" )
 
