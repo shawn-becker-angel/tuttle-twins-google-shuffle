@@ -4,27 +4,15 @@ import argparse
 import sys
 import pathlib
 import boto3
+from typing import Optional
+
+
 s3client = boto3.client('s3')
 
-example = """
-s3_list media.angel-nft.com tuttle_twins/manifest --prefix TT --suffix manifest.csv
-  for filter s3://<bucket>/<dir>/[<prefix>]*[<suffix>]
-"""
-
-parser = argparse.ArgumentParser(description='List files in S3.', usage=f"--help/-h <bucket> <dir> [--prefix <prefix>] [--suffix <suffix>]\nexample: {example}")
-parser.add_argument('bucket', 
-                    help='an s3 bucket')
-parser.add_argument('dir', 
-                    help='an s3 dir/ (or dir/dir/)')
-parser.add_argument('--prefix', metavar="<prefix>",
-                    help='an optional filename prefix')
-parser.add_argument('--suffix', metavar="<suffix>",
-                    help='an optional filename suffix')
-
-args = vars(parser.parse_args())
-
-
-def list_s3_files(bucket, dir, prefix, suffix) -> int:
+def list_s3_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional[str]) -> int:
+    '''
+    returns the number of matching files
+    '''
     print(f"find s3://{bucket}/{dir}/{prefix}*{suffix}")
 
     if not dir.endswith("/"):
@@ -42,16 +30,35 @@ def list_s3_files(bucket, dir, prefix, suffix) -> int:
                 print(key, '\t', obj['LastModified'])
                 num_found += 1
     
-    if num_found == 1:
-        print(num_found, "file found")
-    else:
-        print(num_found, "files found")
+    print(num_found, ("file" if num_found == 1 else "files"), "found")
 
     return num_found
 
-bucket = args['bucket']
-dir =  args['dir']
-prefix = args['prefix']
-suffix = args['suffix']
 
-list_s3_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix)
+if __name__ == "__main__":
+
+    example = """
+    python s3_list media.angel-nft.com tuttle_twins/manifest --prefix TT --suffix manifest.csv
+
+    implements aws s3 ls s3://<bucket>/<dir>/[<prefix>]*[<suffix>]
+    """
+
+    parser = argparse.ArgumentParser(description='List files in S3.', usage=f"--help/-h <bucket> <dir> [--prefix <prefix>] [--suffix <suffix>]\nexample: {example}")
+    parser.add_argument('bucket', 
+                        help='an s3 bucket')
+    parser.add_argument('dir', 
+                        help='an s3 dir/ (or dir/dir/)')
+    parser.add_argument('--prefix', metavar="<prefix>",
+                        help='an optional filename prefix')
+    parser.add_argument('--suffix', metavar="<suffix>",
+                        help='an optional filename suffix')
+
+    args = vars(parser.parse_args())
+
+    bucket = args['bucket']
+    dir =  args['dir']
+    prefix = args['prefix']
+    suffix = args['suffix']
+
+    list_s3_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix)
+
