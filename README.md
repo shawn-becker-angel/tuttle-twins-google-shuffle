@@ -26,6 +26,35 @@ Implemenation of the Tuttle Twins Rarity Estimation project is divided into 5 di
 
 Each stage is implemented using pre-built Tensorflow packages, custom python modules, and data structures running on high-powered servers at Amazon Web Serices or Google Cloud.
 
+## Google Drive Setup  
+
+### Create a new Google Cloud project  
+Go to `https://console.developers.google.com/`  
+Click "create a new project" link named "gsheets-pyshark"  
+Click on top right bell icon to see a notification that the project has been created  
+Click "View" to view the detail page of the newly created project  
+Save your `project_service_account email`   
+
+### Create Keys for your new Google Cloud Project  
+Click the "Keys" tab, click "Add Key", select "Create New Key", select Key type "JSON", click "CREATE" link  
+Copy the new JSON credentials file from your Downloads folder to a safe location  
+Set credentials_file variable to this location  
+
+## Setup a Google Drive spreadsheet  
+### Open an existing Google Drive spreadsheet  
+Go to url `https://docs.google.com/spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184`  
+Ensure that the first row is column names  
+### Or create a new Google Drive spreadsheet  
+Go to `https://docs.google.com/spreadsheets/u/0/?tgif=d` and click "Blank" to create a new spreadsheet  
+Rename the newly created sheet to "pyshark tutorial (`https://pyshark.com/google-sheets-api-using-python`)"  
+Fill out the new spreadsheet - first row is column names  
+## Share the Google Drive spreadsheet with `project_service_account_email`  
+Click "Share" button at top right  
+Under "Share with people and groups" add your `project_service_account_email` from above  
+Alert window says "You are sharing to `project_service_account_email` who is not in the Google Workspace organization that this item belongs to."  
+Click "Share anyway" link  
+Click "Copy link" and set share_link variable to this url  
+
 ## Data Preparation:  
 ### 1. The NFT team creates a Google spreadsheet for each episode in each season.  
 
@@ -42,34 +71,34 @@ Each stage is implemented using pre-built Tensorflow packages, custom python mod
 
     c. S3_BASE_URL, for example: 'https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/'
  
-### 2. `create-manifests-from-google-sheets.py`   
+### 2. `create-manifests.py`  
 
     a. This python module creates a manifest file for each episode spreadsheet for each season  
 
-    b. the list of episode spreadsheets to be processed is defined in an season-episodes file, e.g. `tuttle-twins-S01-episodes.json` . This json file consists of a list of episode objects  
+    b. The list of episode spreadsheets to be processed is defined in a manually created season-episodes file, e.g. `S01-episodes.json` stored under LOCAL_SEASON_EPISODES_DIR. This json file consists of a list of episode objects  
 
-    each episode object has these attributes:  
+    Each episode object has these attributes:  
     
-    * `season` a string, episode's season number, example `S01`  
-        `episode`: a string, episode's episode number, example `E07`  
-        `spreadsheet_title`: string title of the epiode's Google sheet  
-        `spreadsheet_url`: URL, created automatically, which can only be   used by designated users
-        `share_link` a URL, created manually in Google Documents, which anyone can use to open the Google Sheet  
-        `manifest_file`: a local path for the newly created manifest file  
+    * `season_code` a string, episode's season code, example `S01`  
+    * `episode_code`: a string, episode's episode number, example `E07`  
+    * `spreadsheet_title`: string title of the epiode's Google sheet  
+    * `spreadsheet_url`: URL, created automatically, which can only be   used by designated users
+    * `share_link` a URL, created manually in Google Documents, which anyone can use to open the Google Sheet  
+    * `manifest_jl_file`: a local path for the newly created manifest file stored under LOCAL_MANIFESTS_DIR 
     
-    b. google sheet processing requires a google credentials file   
+    b. google sheet processing requires a GOOGLE_CREDENTIALS_FILE   
 
-    c. each episode spreadsheet is downloaded from Google Docs  
+    c. each episode spreadsheet is downloaded from Google Docs using the spread package 
 
     d. each row of an episode spreadsheet is used to create a manifest row with attributes:  
-        `img-ref`, str, the URL to a single image frame stored in S3  
-        `class`, str, the preferred RARITY_CHOICE among the 3 CLASSIFACTION columns described above  
+    * 'img-ref`, str, the URL to a single image frame stored in S3  
+    * `class`, str, the preferred RARITY_CHOICE among the 3 CLASSIFACTION columns described above  
     
-    e. all manifest rows are output as a json lines file to the episode's manifest_file (described above)  
+    e. all manifest rows are output as a json lines file to the episode's manifest_jl_file stored under LOCAL_MANIFESTS_DIR (as described above)  
 
 ### 3. `preview-manifest.ipynb`    
 
-    a. this Jupyter notebook is used to view a sampled selection of the image frames defined in a given `episode manifest file`.   
+    a. this Jupyter notebook is used to view a sampled selection of the image frames defined in a given `episode manifest file` saved under LOCAL_MANIFESTS_DIR.   
 
     NOTE: in the current implementation, the `episode manifest file` is a CSV file that has been uploaded to a given s3 location.  
 
@@ -88,7 +117,7 @@ Each stage is implemented using pre-built Tensorflow packages, custom python mod
     * `https://stats.stackexchange.com/a/220970`   
     * `https://towardsdatascience.com/normalization-vs-standardization-which-one-is-better-f29e043a57eb`  
 
-### 4. `create-datasets.py`   
+### 4. `create-datasets.py`  
 This jupyter notebook file arranges image files into the class-sensitive directory structure required by Tensorflow image classification libraries:  
 
 ```

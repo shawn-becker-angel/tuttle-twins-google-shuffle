@@ -4,8 +4,8 @@
 #
 # specify s3_src_bucket
 # specify s3_dst_bucket
-# for each manifest_file:
-#   read manifest_file into df
+# for each manifest_jl_file:
+#   read manifest_jl_file into df
 #   create columns "src-key" and "dst-key"
 #   for each row in df
 #     s3.copy(src_bucket, src_key, dst_bucket, dst_key)
@@ -36,7 +36,7 @@ def copy_s3_files(df, src_bucket_name, dst_bucket_name):
 def get_season_episodes_file():
     return "episodes/tuttle-twins-S01-episodes.json:
     return 
-def find_latest_episode_manifest_files():
+def find_latest_episode_manifest_jl_files():
     return [
     'S01E01-manifest.jl',
     'S01E02-manifest.jl'
@@ -44,11 +44,11 @@ def find_latest_episode_manifest_files():
 
 # {"src-ref":"https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-09.jpg","class":"Common"}
 
-episode_manifest_files = find_latest_episode_manifest_files()
+episode_manifest_jl_files = find_latest_episode_manifest_jl_files()
 
-for episode_manifest_file in episode_manifest_files:
+for episode_manifest_jl_file in episode_manifest_jl_files:
     season_episode_key = 
-    df = pd.read_json(manifest_file)
+    df = pd.read_json(manifest_jl_file)
     src_base = "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/" + season_episode_key + s01e01/default_eng/v1/frames/stamps/
     df['file'] = df['src-key'].str.replace(base_url, "")
     with open(, "r") as mf:

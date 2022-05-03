@@ -22,48 +22,48 @@ class ManifestKey():
         '''
         return datetime.now().isoformat()
 
-    def get_current_s3_manifest_file_name(self) -> str:
+    def get_current_s3_manifest_jl_file_name(self) -> str:
         '''
         return a string like this:
         "S01_E01-manifest-2022-04-28T16:12:34.123456.jl"
         '''
         return f"S_{self.season}_E{self.episode}-manifest-{get_current_utc_datetime_iso()}.jl"
     
-    def get_current_s3_manifest_file_key(self) -> str:
+    def get_current_s3_manifest_jl_file_key(self) -> str:
         '''
         return a string like this:
         "tuttle-twins/season-manifests/S01_E01-manifest-2022-04-28T16:12:34.123456.jl"
         '''
-        return f"{self.manifest_folder}/{self.get_current_s3_manifest_file_name()}"
+        return f"{self.manifest_folder}/{self.get_current_s3_manifest_jl_file_name()}"
 
-    def validate_local_manifest_file(local_manifest_file):
-        assert is_instance(local_manifest_file, str) and local_manifest_file.endswith(".jl") and len(local_manifest_file) > 4, "'local_manifest_file' must be a non-zero length filename with a 'jl' extension"
+    def validate_local_manifest_jl_file(local_manifest_jl_file):
+        assert is_instance(local_manifest_jl_file, str) and local_manifest_jl_file.endswith(".jl") and len(local_manifest_jl_file) > 4, "'local_manifest_jl_file' must be a non-zero length filename with a 'jl' extension"
 
-    def s3_upload_manifest_file(self, local_manifest_file: str) -> None:
-        validate_local_manifest_file(local_manifest_file)
-        s3_manifest_file_key = self.get_current_s3_manifest_file_key()
-        s3_upload_file(local_manifest_file, self.s3_manifest_bucket, s3_manifest_file_key)
+    def s3_upload_manifest_jl_file(self, local_manifest_jl_file: str) -> None:
+        validate_local_manifest_jl_file(local_manifest_jl_file)
+        s3_manifest_jl_file_key = self.get_current_s3_manifest_jl_file_key()
+        s3_upload_file(local_manifest_jl_file, self.s3_manifest_bucket, s3_manifest_jl_file_key)
 
-    def s3_download_manifest_file(self, s3_manifest_bucket, s3_manifest_file_key, local_manifest_file):
+    def s3_download_manifest_jl_file(self, s3_manifest_bucket, s3_manifest_jl_file_key, local_manifest_jl_file):
         '''
         <s3_manifest_bucket> should be like 
-        local_manifest_file should have extension ".jl"
+        local_manifest_jl_file should have extension ".jl"
         <utc_datetime_iso> should have format YYYY-MM-DDTHH:MM:SS.ssssss
-        <s3_manifest_file_name> should have format Sdd_Edd-manifest-<utc_datetime_iso>.jl
+        <s3_manifest_jl_file_name> should have format Sdd_Edd-manifest-<utc_datetime_iso>.jl
         <s3_manifest_folder> should be like "\w+/season-manifests"
-        <s3_manifest_file_key> should have format <manifest_folder>/<s3_manifest_file_name>
+        <s3_manifest_jl_file_key> should have format <manifest_folder>/<s3_manifest_jl_file_name>
         '''
-        assert local_manifest_file.endswith(".jl"), "local_manifest_file lacks '.jl' extension"
-        s3_manifest_file_key = f"{manifest_folder}/S{season.upper()}_E{episode.upper()}"
+        assert local_manifest_jl_file.endswith(".jl"), "local_manifest_jl_file lacks '.jl' extension"
+        s3_manifest_jl_file_key = f"{manifest_folder}/S{season.upper()}_E{episode.upper()}"
 
 
         s3_manifest_key = f"{manifest_folder}/S{season.upper()}_E{episode.upper()}"
-        s3.upload_file(local_manifest_file, s3_manifest_bucket, s3_manifest_key)
+        s3.upload_file(local_manifest_jl_file, s3_manifest_bucket, s3_manifest_key)
 
-    def s3_download_manifest_file(local_manifest_file):
-        s3_download_file(s3_manifest_bucket, s3_manifest_key, local_manifest_filee)
+    def s3_download_manifest_jl_file(local_manifest_jl_file):
+        s3_download_file(s3_manifest_bucket, s3_manifest_key, local_manifest_jl_filee)
 
-    def s3_find_manifest_files():
+    def s3_find_manifest_jl_files():
         '''
         returns a list of all manifest files for the current season and episode
         '''

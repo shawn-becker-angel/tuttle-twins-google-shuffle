@@ -1,0 +1,38 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "s3_utils calling s3_list_files",
+            "type": "python",
+            "request": "launch",
+            "program": "s3_utils.py",
+            "args": [
+                "media.angel-nft.com",
+                "tuttle_twins/manifests",
+                "--suffix", ".jl",
+                "-v"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "s3_utils tests",
+            "type": "python",
+            "request": "launch",
+            "program": "s3_utils.py",
+            "args": [],
+            "console": "integratedTerminal"
+        },
+
+    ]
+}
