@@ -5,9 +5,21 @@ import os
 import sys
 import pathlib
 import filecmp
-import boto3
 from typing import Optional
 
+import boto3
+s3_client = boto3.client('s3')
+
+def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
+    '''
+    returns the response dict
+    '''
+    response = s3_client.copy_object(
+        CopySource={'Bucket': src_bucket, 'Key': src_key}, 
+        Bucket=dst_bucket, 
+        Key=dst_key
+    )
+    return response
 
 def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional[str], verbose: bool=False) -> int:
     '''
@@ -22,8 +34,7 @@ def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional
     if not dir.endswith("/"):
         dir += "/"
 
-    s3client = boto3.client('s3')
-    response = s3client.list_objects_v2(
+    response = s3_client.list_objects_v2(
         Bucket=bucket,
         Prefix=dir )
 
@@ -95,6 +106,20 @@ def s3_list_file_cli():
 # TESTS
 ###################################################
 
+def test_s3_copy_file():
+    '''
+    {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 
+    "dst_key": "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
+    '''
+    src_bucket = "media.angel-nft.com"
+    src_key = "tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg"
+    dst_bucket = "media.angel-nft.com"
+    dst_key = "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"
+    response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
+    httpStatusCode = response['ResponseMetadata']['HTTPStatusCode']
+    assert httpStatusCode == 200, f"bad httpStatusCode: {httpStatusCode}"
+
+
 def test_s3_upload_download():
     tmp_dir = "/tmp"
     test_up_path = os.path.join(tmp_dir, "test_up.txt")
@@ -140,6 +165,7 @@ if __name__ == "__main__":
 
     # run tests if the only argv is this module name
     if len(sys.argv) == 1:
+        test_s3_copy_file()
         test_s3_upload_download()
         test_s3_list_files()
     
