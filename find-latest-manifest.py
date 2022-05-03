@@ -65,6 +65,8 @@ if __name__ == "__main__":
    s3_manifest_jl_file = s3_latest['key']
    key = S3_MANIFESTS_DIR + "/" + s3_manifest_jl_file
    local_jl_file = "/tmp/latest.jl"
+
+   # THIS FAILS 
    s3_download_text_file(S3_MANIFEST_BUCKET, key, local_jl_file)
 
    # print the first 10 lines of  local_jl_file
