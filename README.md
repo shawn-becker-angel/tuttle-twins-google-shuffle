@@ -56,60 +56,75 @@ Click "Share anyway" link
 Click "Copy link" and set share_link variable to this url  
 
 ## Data Preparation:  
-### 1. The NFT team creates a Google spreadsheet for each episode in each season.  
-
+Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "episodes"
+### 1. The NFT team manages a "Google Episode Spreadsheet" for each episode in each season.  
     a. Each row in an episode spreadsheet has the following columns:
-        S3_BASE_URL: str, (see below)
-        ROW_INDEX: int, starts with 0
-        FRAME NUMBER: str, example: 'TT_S01_E01_FRM-00-00-08-12'
-        UNSUPERVISED CLASSIFICATION: RARITY_CHOICE
-        SUPERVISED CLASSIFICATION: RARITY_CHOICE (optional)
-        JONNY's RECLASSIFICATION: RARITY_CHOICE (optional)
-        METADATA: subjects_list, example ['Emily', 'Space Tunnel', 'Time Machine']  
+      * `S3_BASE_URL`: example: 
+        `https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/`
+      * `ROW_INDEX`: starts with 0
+      * `FRAME NUMBER`: example: `TT_S01_E01_FRM-00-00-08-12`
+      * `UNSUPERVISED CLASSIFICATION`: see `RARITY_CHOICES`
+      * `SUPERVISED CLASSIFICATION`: see `RARITY_CHOICES`
+      * `JONNY's RECLASSIFICATION`: see `RARITY_CHOICES`
+      * `METADATA`: example `[Emily, Space Tunnel, Time Machine]`  
+    b. `RARITY_CHOICES` can be one of `(Junk, Common, Uncommon, Rare, or Legendary)`
+    c. S3_BASE_URL and the FRAME NUMBER are used to compute the S3 src_url. example:
+        `https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-08-12.jpg` 
+    d `ROW_INDEX` and `METADATA` are not used for this project
 
-    b. RARITY_CHOICE can be one of  (Junk, Common, Uncommon, Rare, Legendary)  
+### 2. "Season Manifest Files" (a json file):  
+    a. A Season Manifest File defines the Episode Google Sheet used for each episode in that season.
+    b. This is a json text file that is manually created and uploaded to S3 whenever a new episode is published  
+    c. Periodic re-generated of Episode Manifest Files is directed by its Season Manifest File.  
+    d. Example:  
+      ```
+      aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | grep "-episodes.json"  
+      2022-05-04 13:36:39        962 S01-episodes.json  
+      ```
+    e. This json file consists of a list of "Episode Objects" (python dict), each with these attributes:  
+      * `season_code` a string, episode's season code, example `S01`  
+      * `episode_code`: a string, episode's episode number, example `E07`  
+      * `spreadsheet_title`: string title of the epiode's Google sheet  
+      * `spreadsheet_url`: URL, of the google spreadsheet, which can be used for editing by designated users only
+      * `share_link` a manually created URL, that anyone can use to view the google spreadsheet  
+      * TODO remove local_manifest_jl_file attribute, since each episode has many versioned episode manifest files in S3
 
-    c. S3_BASE_URL, for example: 'https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/'
- 
-### 2. `create-manifests.py`  
+### 3. "Versioned Episode Manifest Files" (a file of json lines):  
 
-    a. This python module creates a manifest file for each episode spreadsheet for each season  
-
-    b. The list of episode spreadsheets to be processed is defined in a manually created season-episodes file, e.g. `S01-episodes.json` stored under LOCAL_SEASON_EPISODES_DIR. This json file consists of a list of episode objects  
-
-    Each episode object has these attributes:  
+    a. Many Versioned Episode Manifest files are stored in S3 for a given episode.
+    b. A new Versioned Episode Manifest file is periodically re-generated from the data available in its associated Episode Google Sheet.
+    c. A newly generated Episode Manifest file is only uploaded to S3 if it differs from the previous latest version in S3
+    d. Example:
+      ```
+      (venv) ~/workspace/tuttle-twins-rarity$ aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"  
+      2022-05-02 14:54:19    4744253 S01E01-manifest-2022-05-02T12:43:24.662714.jl  
+      2022-05-02 14:54:19    4744253 S01E01-manifest-2022-05-02T13:09:44.722111.jl  
+      ```
+### 4, "Episode Manifest Row" (a python dict):  
+    a. Each row of the Episode Manifest file describes:
+      * 'src_url`, the S3 URL of the image jpg file of a given frame
+      * `dst_key`, the S3 KEY of the copied image file
+    b. Machine Learning (ML) algorithms require that images be randomly shuffled into different folders, one for each processing stage:
+      * a random selection of 70% of all pre-classified images are copied into the "train" folder
+      * a random selection of 20% of all pre-classified images are copied into the "validate" folder
+      * a random selection of 10% of all pre-classified images are copied into the "test" folder
+    c. Example:
+    ```
+      {  "src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-00.jpg",   
+         "dst_key": "tuttle_twins/s01e01/ML/train/Rare/TT_S01_E01_FRM-00-00-09-00.jpg"   } 
+    ``` 
+### 5. `create-manifests.py` (a python module):  
+    a. This python module creates an Episode Manifest File for each Episode Object defined in a Season Manifest File 
+    b. each episode spreadsheet is downloaded from Google Docs using google's API functions installed via its `spread` package 
+    c. google sheet processing API functions require a GOOGLE_CREDENTIALS_FILE   
     
-    * `season_code` a string, episode's season code, example `S01`  
-    * `episode_code`: a string, episode's episode number, example `E07`  
-    * `spreadsheet_title`: string title of the epiode's Google sheet  
-    * `spreadsheet_url`: URL, created automatically, which can only be   used by designated users
-    * `share_link` a URL, created manually in Google Documents, which anyone can use to open the Google Sheet  
-    * `manifest_jl_file`: a local path for the newly created manifest file stored under LOCAL_MANIFESTS_DIR 
-    
-    b. google sheet processing requires a GOOGLE_CREDENTIALS_FILE   
-
-    c. each episode spreadsheet is downloaded from Google Docs using the spread package 
-
-    d. each row of an episode spreadsheet is used to create a manifest row with attributes:  
-    * 'img-ref`, str, the URL to a single image frame stored in S3  
-    * `class`, str, the preferred RARITY_CHOICE among the 3 CLASSIFACTION columns described above  
-    
-    e. all manifest rows are output as a json lines file to the episode's manifest_jl_file stored under LOCAL_MANIFESTS_DIR (as described above)  
-
-### 3. `preview-manifest.ipynb`    
-
-    a. this Jupyter notebook is used to view a sampled selection of the image frames defined in a given `episode manifest file` saved under LOCAL_MANIFESTS_DIR.   
-
-    NOTE: in the current implementation, the `episode manifest file` is a CSV file that has been uploaded to a given s3 location.  
-
+### 6. `preview-manifest.ipynb` (a jupyter notebook):    
+    a. this Jupyter notebook is used to view a sampled selection of the image frames defined in a given `episode manifest file` downloaded from S3
     b. it uses the local `plot_hist_lib/plot_image_histogram.py` module to render a given RGB image  
-
     c. a "standardized" version of the image is then computed where:  
-    * each RGB pixel is converted to GRAYscale  
-    * each grayscale pixel is converted from byte to float
-    * pixel values are shifted so that the mean of all pixel values in the image is 0.0  
-    * pixel values are scaled so that the stddev of all pixel values in the frame is 1.0  
-
+      * each 8-bit RGB pixel is converted to a floating-point GRAYscale value
+      * pixel values are shifted so that the mean of all pixel values in the image is 0.0  
+      * pixel values are scaled so that the stddev of all pixel values in the frame is 1.0  
     d. a histogram of the standardized image is then computed and superimposed on the RGB image  
 
     NOTE: justifications for image data "normalization" by mean and stddev:  
@@ -117,8 +132,8 @@ Click "Copy link" and set share_link variable to this url
     * `https://stats.stackexchange.com/a/220970`   
     * `https://towardsdatascience.com/normalization-vs-standardization-which-one-is-better-f29e043a57eb`  
 
-### 4. `create-datasets.py`  
-This jupyter notebook file arranges image files into the class-sensitive directory structure required by Tensorflow image classification libraries:  
+### 7. `process_manifests.py` (a python module) 
+This module copies  notebook file arranges image files into the class-sensitive directory structure required by Tensorflow image classification libraries:  
 
 ```
 s3://dst-bucket/
@@ -178,8 +193,46 @@ Another approach (needs experimentation) is to use `aws s3 cp --recursive` on ca
     s3://<dst-bucket>/<dst-folder>/train/<class>  
 ```
 
+## Tuttle Twins Seasons and Episodes:  
+There may be many seasons and each season has several episodes
+
+## Episode Google Sheet:  
+An Episode Google Sheet is a spreadsheet that contains data for thousands of frames in a single TuttleTwins Episode
+Each row describes the S3 Image URL, Frame Number, Classifications, and Tags for a given frame
+This spreadsheet can be manually altered by the NFT team at any time
+
+## S3 Image Url:  
+Pre-sized versions of each image frame are stored as JPG files in s3:  
+* high_res: 1920x1080 pixels
+* mid_res: 1024x576 pixels
+* low_res: 854x480 pixels
+* thumbnails: 640x360 pixels
+
+Example URL:  
+`https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-08-21.jpg`  
+
+Example S3 object query:  
+`aws s3 ls s3://media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-08-21.jpg`  
+## Classifications:  
+### Ranks:
+The Episode Google Sheeth has Classification columns whose values may be one of 5 rankings:
+  Junk, Common, Uncommon, Rare, and Legendary  
+
+### Three Classification Columns:  
+* Unsupervised classifictions (Common, Uncommon, Rare) are done using K-Means clustering of image metrics (what image metrics?)  
+* Supervised classifications (Junk, Common, Uncommon, Rare) are entered manually (using what tagging tool?)  
+* Jonny's classifications (Legendary) are entered manually (using what tagging tool?)  
 
 
 
 
+## S3 Key Row:  
+This class describes attributes of each  row output from an 'aws s3 ls search'
+```
+Example row of outpout:
+"2022-05-03 19:15:34       2715 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"  
+
+Parsed S3 Key Row attributes:
+{ "last_modified": "2022-05-03T19:15:34", "size": 2715, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"}
+```
 

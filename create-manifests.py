@@ -8,11 +8,12 @@ import json
 import random
 from random import choices
 import datetime
+from manifest_row import ManifestRow
 
 import typing
 from typing import Any, List, Dict
 
-from manifest import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR, LOCAL_SEASON_EPISODES_DIR
+from constants import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR
 
 # use pip install python-dotenv
 from dotenv import load_dotenv
@@ -24,6 +25,7 @@ load_dotenv()
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
 
 # Create the local manifest file and store it locally in LOCAL_MANIFIESTS_DIR
+#
 # Find and download the latest version of the matching manifest file in S3 
 # 
 # Compare the local file to the latest from s3
@@ -87,8 +89,8 @@ def create_episode_manifest_jl_file(episode: List[Dict]):
         raise Exception("episode manifest_jl_file:" + manifest_jl_file + " requires replaceable <utc_datetime_iso> substring")
 
     # replace <utc_datetime_iso> with the current value, e.g. '2022-04-28T10:43:48.733843'
-    utc_datetime_iso = datetime.datetime.utcnow().isoformat()
-    manifest_jl_file = manifest_jl_file.replace("<utc_datetime_iso>", utc_datetime_iso)
+    current_utc_datetime_iso = datetime.datetime.utcnow().isoformat()
+    manifest_jl_file = manifest_jl_file.replace("<utc_datetime_iso>", current_utc_datetime_iso)
 
     # use the google credentials file and the episode's share_link to read
     # the raw contents of the first sheet into df
@@ -159,21 +161,88 @@ def create_episode_manifest_jl_file(episode: List[Dict]):
     print(f"output episode manifest_path:{manifest_path} num_lines:{num_lines}")
 
 
-def create_season_manifest_jl_files():
+def download_s3_season_manifest_files() -> List[Dict]:
     '''
-    Each season_episode_file, e.g. "S01-episodes.json" describes the parameters 
-    used to create episode_manifest files for all of its episodes.
+    download all season_manifests found in s3
+    '''
+    # example: aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\d-episodes.json"
+    # same as f"aws s3 ls s3://{S3_MEDIA_ANGEL_NFT_BUCKET}/tuttle_twins/mainifests/ | grep \"S\d\d-episodes.json\""
+
+    bucket = S3_MEDIA_ANGEL_NFT_BUCKET
+    dir = "tuttle_twins/manifests"
+    prefix = "S"
+    suffix = "-episodes.json"
+
+    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
+    if s3_key_rows is None or len(s3_key_rows) == 0:
+        logger.info("zero season manifest files found in s3 - returning empty list")
+        return []
+
+    season_manifests = []
+    for manifest_key_row in s3_key_rows:
+        key = manifest_key_row['key']
+        tmp_file = "/tmp/manifest-" + datetime.datetime.utcnow().isoformat()
+        s3_download_text_file(S3_MEDIA_ANGEL_NFT_BUCKET, key, tmp_file)
+        season_manifest_dict = json.load(tmp_file)
+        season_manifests.append(season_manifest_dict)
+        os.remove(tmp_file)
+
+    return season_manifests
+
+
+def download_latest_s3_episode_manifest_file(season_code: str, episode_code: str) -> List[ManifestRow]:
+    '''
+    download the latest episode_manifest for a given season and episode found in s3
+    '''
+
+    # example: aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"
+    # same as f"aws s3 ls s3://{S3_MEDIA_ANGEL_NFT_BUCKET}/tuttle_twins/mainifests/ | egrep \"S\d\dE\d\d-.*\.jl\""
+
+    se_code = (season_code + episode_code).upper()
+    bucket = S3_MEDIA_ANGEL_NFT_BUCKET
+    dir = "tuttle_twins/manifests"
+    prefix = se_code
+    suffix = ".jl"
+
+    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
+    if s3_key_rows is None or len(s3_key_rows) == 0:
+        logger.info(f"zero episode manifest files found for {se_code} in s3 - returning empty list")
+        return []
+
+    # sort the s3_key_rows by their last_modified attribute descending from latest to earliest
+    sorted_key_rows = sorted(s3_key_rows, key=lambda x: x['last_modified'], reverse=True)
+    latest_manifest_key = sorted_key_rows[0]['key']
+
+    tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat()
+    s3_download_text_file(bucket, latest_manifest_key, tmp_file)
+
+    for open(tmp_file, "r") as f:
+        for line in f:
+            manifest_row = json.loads(line)
+            manifest_rows.append(manifest_row)
+
+    os.remove(tmp_file)
+
+    return manifest_rows
+
+
+
+def create_manifest_jl_files():
+    '''
+    Each local "season_manifest_file", e.g. "S01-episodes.json" describes the parameters 
+    used to create "episode_manifest files" for each of its episodes.
 
     These JSON files are created manually by members of the Angel Studios Data team
     '''
-    season_episode_files = [f for f in os.listdir(LOCAL_SEASON_EPISODES_DIR) if re.match(r'S\d\d-episodes.json', f)]
+
+    s3_season_manifest_files = download_s3_season_manifest_files()
 
     # create an episode manifest file for all episodes in each season
-    for season_episode_file in season_episode_files:
-        season_episode_path = os.path.join(LOCAL_SEASON_EPISODES_DIR,season_episode_file)
-        with open(season_episode_path,"r") as f:
-            season_episodes = json.load(f)
-            for episode in season_episodes:
+    for season_manifest_file in season_manifest_files:
+        season_manifest_path = os.path.join(LOCAL_MANIFESTS_DIR, season_manifest_file)
+        with open(season_manifest_path,"r") as f:
+            season_manifests = json.load(f)
+            for episode in season_manifests:
                 create_episode_manifest_jl_file(episode)
 
 

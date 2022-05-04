@@ -3,7 +3,8 @@ from typing import Any, List, TypedDict
 import re
 import os
 import boto3
-from manifest import ManifestRow, S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
+import manifest_row
+from constants import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
 
 from s3_utils import s3_download_text_file
 

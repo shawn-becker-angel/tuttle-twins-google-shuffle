@@ -5,29 +5,80 @@ import os
 import sys
 import pathlib
 import filecmp
-from typing import Optional
-
+import subprocess
+import datetime
+from time import perf_counter
+from typing import Optional, List
 import boto3
+from botocore.exceptions import ClientError
+from time import perf_counter
+from s3_key_row import S3KeyRow
+
 s3_client = boto3.client('s3')
+
+import logging
+logger = logging.getLogger(__name__)
+
+def s3_log_timer_info(func):
+    '''
+    decorator that shows execution time using this module's logger.info
+    '''
+    def wrap_func(*args, **kwargs):
+        t1 = perf_counter()
+        result = func(*args, **kwargs)
+        elapsed = perf_counter() - t1
+        logger.info(f'{func.__name__!r} executed in {elapsed:.6f}s')
+        return result
+    return wrap_func
+
 
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
     '''
     returns the response dict
     '''
-    response = s3_client.copy_object(
-        CopySource={'Bucket': src_bucket, 'Key': src_key}, 
-        Bucket=dst_bucket, 
-        Key=dst_key
-    )
-    return response
+    try:
+        response = s3_client.copy_object(
+            CopySource={'Bucket': src_bucket, 'Key': src_key}, 
+            Bucket=dst_bucket, 
+            Key=dst_key
+        )
+        return response
+    except ClientError as ex:
+        if ex.response['Error']['Code'] == 'NoSuchKey':
+            logger.info(f"s3_copy_file() - No object found for src_key:{src_key} or dst_key:{dst_key} - returning empty")
+            return dict()
+        else:
+            raise
 
-def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional[str], verbose: bool=False) -> int:
+
+def s3_upload_text_file(up_path, bucket, channel):
     '''
-    returns the number of matching files
+    upload a text file to s3
+    '''
+    up_file = os.path.basename(up_path)
+    s3 = boto3.resource('s3')
+    key = channel + "/" + up_file
+    data = open(up_path, "rb")
+    s3.Bucket(bucket).put_object(Key=key, Body=data)
+
+
+def s3_download_text_file(bucket, key, dn_path):
+    '''
+    download a text file from s3
+    '''
+    s3 = boto3.resource('s3')
+    s3.Bucket(bucket).download_file(key, dn_path)
+
+
+@s3_log_timer_info
+def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional[str], verbose: bool=False) -> List[S3KeyRow]:
+    '''
+    returns a list of S3KeyRows describing s3 object that match the given search criteria
     '''
     prefix_str = "" if prefix is None else prefix + "*"
     suffix_str = "" if suffix is None else "*" + suffix
 
+    s3_key_rows = []
     if verbose:
         print(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}{suffix_str}")
 
@@ -43,36 +94,24 @@ def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional
         key = obj['Key']
         if prefix is None or prefix in key:
             if suffix is None or suffix in key:
+                s3_key_dict = { "last_modified": obj['LastModified'], "size": obj['Size'], "key": key}
+                s3_key_row = S3KeyRow(s3_key_dict=s3_key_dict)
+                s3_key_rows.append(s3_key_row)
                 if verbose:
-                    print(key, '\t', obj['LastModified'])
+                    print(key, '\t', )
                 num_found += 1
     
     if verbose:
         print(num_found, ("file" if num_found == 1 else "files"), "found")
 
-    return num_found
+    return s3_key_rows
 
 
-def s3_upload_text_file(up_path, bucket, channel):
-    '''
-    upload a text file to s3
-    '''
-    up_file = os.path.basename(up_path)
-    s3 = boto3.resource('s3')
-    key = channel + "/" + up_file
-    data = open(up_path, "rb")
-    s3.Bucket(bucket).put_object(Key=key, Body=data)
-
-def s3_download_text_file(bucket, key, dn_path):
-    '''
-    download a text file from s3
-    '''
-    s3 = boto3.resource('s3')
-    s3.Bucket(bucket).download_file(key, dn_path)
-
+@s3_log_timer_info
 def s3_list_file_cli():
     '''
-    call s3_list_files() using command line arguments
+    call s3_lis= t_files() using command line arguments
+    returns the number of files in S3 that match the given search criteria
     '''
     example = """
     python s3_utils media.angel-nft.com tuttle_twins/manifests --suffix .jl
@@ -99,7 +138,38 @@ def s3_list_file_cli():
     suffix = args['suffix']
     verbose = args['verbose']
 
-    s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=verbose)
+    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=verbose)
+    return len(s3_key_rows)
+
+
+@s3_log_timer_info
+def s3_ls_recursive(path: str) -> List[S3KeyRow]:
+    '''
+    if given <path> "s3://media.angel-nft.com/tuttle_twins/s01e01/ML/"
+    makes system call "aws s3 ls --recursive <path> > <tmp_file>" 
+    each line in <tmp_file>, e.g.
+        "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+    is parsed to create an S3KeyRow object, which can be converted to dict, e.g.
+        {"last_modified":"2022-05-03T19:15:44", "size":2336, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
+    return the list of all S3KeyRows as s3_key_listing
+    '''
+    s3_key_listing = []
+    utc_datetime_iso = datetime.datetime.utcnow().isoformat()
+    tmp_file = "/tmp/tmp-" + utc_datetime_iso
+    cmd = "aws s3 ls --recursive " + path + " > " + tmp_file
+    returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
+
+    if returned_value != 0:
+        logger.error(f"subprocess exit code:{returned_value} - returning empty list")
+        return []
+    
+    with open(tmp_file,"r") as f:
+        line = f.readline()
+        s3_key_row = S3KeyRow(s3_ls_line=line)
+        s3_key_listing.append(s3_key_row)
+    
+    os.remove(tmp_file)
+    return s3_key_listing
 
 
 ###################################################
