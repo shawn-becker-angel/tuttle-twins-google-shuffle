@@ -161,11 +161,62 @@ def create_episode_manifest_jl_file(episode: List[Dict]):
     print(f"output episode manifest_path:{manifest_path} num_lines:{num_lines}")
 
 
+def parse_episode_manifest_version(episode_manifest_key: str) -> str:
+    '''
+    Parse out the utc_timestamp_iso portion of the given episode_manifest_key
+    as the episode_manifest_version
+
+        Parameters
+        -----------
+            episode_manifest_key (str)
+
+        Returns
+        ---------
+            episode_manifest_version (str) or None if any exceptions were caught
+
+        Notes
+        -------
+            Example episode manifest key:
+            s3://media.angel-nft.com/tuttle_twins/manifests/S01E01-manifest-2022-05-02T12:43:24.662714.jl
+            
+            Example episode manifest version - a utc_datetime_iso string:
+            2022-05-02T12:43:24.662714
+    '''
+    utc_datetime_iso_pattern = r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6})"
+    result = re.search(utc_datetime_iso_pattern, episode_manifest_key)
+    version = result.group(1)
+    return version
+
+
 def download_s3_season_manifest_files() -> List[Dict]:
     '''
-    download all season_manifests found in s3
-    '''
-    # example: aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\d-episodes.json"
+    Download all season_manifests found in s3 regardless of
+    season, episode or datetime version
+
+        Parameters
+        ----------
+            None
+        
+        Returns
+        -------
+            An unordered list of ManifestRow describing the contents of the most recent manifest.jl file 
+            for the given season and episode in S3. Return an empty list if no manifest file is found.
+        
+        Notes
+        -------
+            Example s3 manifest key:
+            s3://media.angel-nft.com/tuttle_twins/manifests/S01E01-manifest-2022-05-02T12:43:24.662714.jl
+            
+            Example s3 manifest filename:
+            S01E01-manifest-2022-05-02T12:43:24.662714.jl
+
+            Example aws cli command to find all manifest files for all seasons and episodes:
+            aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"
+
+            Example json string from a season 1 episode 1 manifest file, with ManifestLine format:
+            '{"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-04.jpg", "dst_key": "tuttle_twins/s01e01/ML/validate/Legendary/TT_S01_E01_FRM-00-00-09-04.jpg"}'
+
+        '''       # example: aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\d-episodes.json"
     # same as f"aws s3 ls s3://{S3_MEDIA_ANGEL_NFT_BUCKET}/tuttle_twins/mainifests/ | grep \"S\d\d-episodes.json\""
 
     bucket = S3_MEDIA_ANGEL_NFT_BUCKET
@@ -173,14 +224,14 @@ def download_s3_season_manifest_files() -> List[Dict]:
     prefix = "S"
     suffix = "-episodes.json"
 
-    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
-    if s3_key_rows is None or len(s3_key_rows) == 0:
+    manifest_keys = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
+    if manifest_keys is None or len(manifest_keys) == 0:
         logger.info("zero season manifest files found in s3 - returning empty list")
         return []
 
     season_manifests = []
-    for manifest_key_row in s3_key_rows:
-        key = manifest_key_row['key']
+    for manifest_key in manifest_keys:
+        key = manifest_key['key']
         tmp_file = "/tmp/manifest-" + datetime.datetime.utcnow().isoformat()
         s3_download_text_file(S3_MEDIA_ANGEL_NFT_BUCKET, key, tmp_file)
         season_manifest_dict = json.load(tmp_file)
@@ -189,45 +240,119 @@ def download_s3_season_manifest_files() -> List[Dict]:
 
     return season_manifests
 
-
-def download_latest_s3_episode_manifest_file(season_code: str, episode_code: str) -> List[ManifestRow]:
+def s3_download_manifest_file(manifest_bucket: str, manifest_key: str) -> List[ManifestRow]:
     '''
-    download the latest episode_manifest for a given season and episode found in s3
-    '''
+    download all manifest files for a given season and episode regardless of version
+        Parameters
+        ----------
+            season_code (str): e.g. S01 for season 1
+            episode_code (str): e.g. E08 for episode 8
+        
+        Returns
+        -------
+            An unordered list of ManifestRow describing the contents of the most recent manifest.jl file 
+            for the given season and episode in S3. Return an empty list if no manifest file is found.
+        
+        Notes
+        -------
+            Example s3 manifest filename:
+            S01E01-manifest-2022-05-03T22:53:30.325223.jl
 
-    # example: aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"
-    # same as f"aws s3 ls s3://{S3_MEDIA_ANGEL_NFT_BUCKET}/tuttle_twins/mainifests/ | egrep \"S\d\dE\d\d-.*\.jl\""
+            Example aws cli command to find all manifest files for all seasons and episodes:
+            aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"
 
-    se_code = (season_code + episode_code).upper()
-    bucket = S3_MEDIA_ANGEL_NFT_BUCKET
-    dir = "tuttle_twins/manifests"
-    prefix = se_code
-    suffix = ".jl"
+            Example json string from a season 1 episode 1 manifest file, with ManifestLine format:
+            '{"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-04.jpg", "dst_key": "tuttle_twins/s01e01/ML/validate/Legendary/TT_S01_E01_FRM-00-00-09-04.jpg"}'
 
-    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
-    if s3_key_rows is None or len(s3_key_rows) == 0:
-        logger.info(f"zero episode manifest files found for {se_code} in s3 - returning empty list")
-        return []
-
-    # sort the s3_key_rows by their last_modified attribute descending from latest to earliest
-    sorted_key_rows = sorted(s3_key_rows, key=lambda x: x['last_modified'], reverse=True)
-    latest_manifest_key = sorted_key_rows[0]['key']
-
+        '''   
+    # create a temp file to hold the contents of the download
     tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat()
-    s3_download_text_file(bucket, latest_manifest_key, tmp_file)
 
-    for open(tmp_file, "r") as f:
-        for line in f:
-            manifest_row = json.loads(line)
-            manifest_rows.append(manifest_row)
+    manifest_rows = []
+    try:
+        # use bucket and key to download manifest file to local tmp_file 
+        s3_download_text_file(manifest_bucket, manifest_key, tmp_file)
 
-    os.remove(tmp_file)
+        # The manifest file is a text file with a json string on each line.
+        # Decode each json_str into a json dict and use ManifestRow to 
+        # verify that the json_dict has the required structure.
+        # Append the manifest_row to list of all manifest_rows. 
+        with open(tmp_file, "r") as f:
+            for json_str in f:
+                json_dict = json.loads(json_str)
+                manifest_row = ManifestRow(json_dict)
+                manifest_rows.append(manifest_row)
+    finally:
+        # delete the tmp_file whether or not any exceptions were thrown
+        if os.path.exists(tmp_file):
+            os.remove(tmp_file)
 
     return manifest_rows
 
 
+def download_latest_s3_episode_manifest_file(season_code: str, episode_code: str) -> List[ManifestRow]:
+    '''
+    List the keys of all episode manifest files for the given season and 
+    episode in S3. Return an empty list if no keys were found.
 
-def create_manifest_jl_files():
+    Parse the 'version' string as the ending <utc_datetime_iso> 
+    portion of each key and add it as a new 'version' property of each key. 
+
+    Sort the list of keys by 'version' descending from highest to lowest.
+    The latest manifest_key is first in the sorted list.
+
+    Download and return the contents of latest manifest file as a list of 
+    ManifestRow dicts. 
+
+    Parameters
+    ----------
+        season_code (str): e.g. S01 for season 1
+        episode_code (str): e.g. E08 for episode 8
+    
+    Returns
+    -------
+        An unordered list of ManifestRow describing the contents of the most recent episode manifest file 
+        for the given season and episode in S3. Return an empty list if no manifest file is found.
+    
+    Notes
+    -------
+        Example s3 manifest filename:
+        S01E01-manifest-2022-05-03T22:53:30.325223.jl
+
+        Example aws cli command to find all manifest files for all seasons and episodes:
+        aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"
+
+        Example json string from a season 1 episode 1 manifest file, with ManifestLine format:
+        '{"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-04.jpg", "dst_key": "tuttle_twins/s01e01/ML/validate/Legendary/TT_S01_E01_FRM-00-00-09-04.jpg"}'
+
+    '''
+    bucket = S3_MEDIA_ANGEL_NFT_BUCKET
+    dir = "tuttle_twins/manifests"
+    prefix = se_code =  (season_code + episode_code).upper()
+    suffix = ".jl"
+
+    manifest_keys = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
+    if manifest_keys is None or len(manifest_keys) == 0:
+        logger.info(f"zero episode manifest files found for {se_code} in s3 - returning empty list")
+        return []
+
+    # Parse the 'version' string as the ending <utc_datetime_iso> 
+    # portion of each key and add it as a new 'version' property of each key. 
+    for manifest_key in manifest_keys:
+        version = parse_episode_manifest_version(manifest_key)
+        manifest_key['version'] = version
+    
+    # sort the manifest_keys array by the last_modified attribute, descending from latest to earliest
+    # the zero element is the latest key
+    latest_manifest_key = sorted(manifest_keys, key=lambda x: x['version'], reverse=True)[0]
+
+    # download the contents of the manifest file as a list of ManifestRow dicts
+    manifest_rows = s3_download_manifest_file(S3_MEDIA_ANGEL_NFT_BUCKET, latest_manifest_key)
+    return manifest_rows
+
+
+
+def create_episode_manifest_files():
     '''
     Each local "season_manifest_file", e.g. "S01-episodes.json" describes the parameters 
     used to create "episode_manifest files" for each of its episodes.
@@ -245,8 +370,17 @@ def create_manifest_jl_files():
             for episode in season_manifests:
                 create_episode_manifest_jl_file(episode)
 
+# =============================================
+# TESTS
+# =============================================
+
+def test_parse_episode_manifest_version():
+    episode_management_key = "s3://media.angel-nft.com/tuttle_twins/manifests/S01E01-manifest-2022-05-02T12:43:24.662714.jl"
+    expected_episode_management_version = "2022-05-02T12:43:24.662714"
+    result = parse_episode_manifest_version(episode_management_key)
+    assert result == expected_episode_management_version, f"unexpected result:{result}"
+
 
 if __name__ == "__main__":
-    create_season_manifest_jl_files()
-
+    test_parse_episode_manifest_version()
 
