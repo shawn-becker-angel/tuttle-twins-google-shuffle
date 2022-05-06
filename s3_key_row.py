@@ -1,19 +1,18 @@
 from typing import TypedDict
 import datetime
 
-
-# describes aws s3 ls results as a dict with typed attributes
-class S3KeyRow:
+# describes each row of an 'aws s3 ls' search results as a dict with typed attributes
+class S3KeyRow(TypedDict):
     last_modified: datetime.datetime
-    size: int
+    size: str
     key: str
     
     def __init__(self, s3_ls_line: str=None, s3_key_dict: dict=None):
         if s3_ls_line is not None:
             '''
-            parse one line of the result of 'aws s3 ls --recursive <path>', e.g.
+            Take one line of the result of 'aws s3 ls --recursive <path>', e.g.
             "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
-            parsed into dict, e.g.
+            and parse it into a S3KeyRow dict, e.g.
             {"last_modified": 2022-05-03T19:15:44 , "size":2336, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
             '''
             parts = s3_ls_line.split(" ")
@@ -21,6 +20,9 @@ class S3KeyRow:
             self.size = int(parts[2])
             self.key = parts[3]
         elif s3_key_dict is not None:
+            '''
+            Take the attributes of another S3KeyRow dict to set attributs
+            '''
             self.last_modfied = s3_key_dict['last_modified']
             self.size = s3_key_dict['size']
             self.key = s3_key_dict['key']
@@ -28,5 +30,8 @@ class S3KeyRow:
             raise Exception("S3KeyRow requires either s3_ls_line or s3_key_dict argument")
 
     def as_dict(self):
-        return { "last_modified" : self.last_modified, "size": size, "key": key }
+        '''
+        Return an explicit S3KeyRow dict (perhaps not needed)
+        '''
+        return { "last_modified" : self.last_modified, "size": self.size, "key": self.key }
     

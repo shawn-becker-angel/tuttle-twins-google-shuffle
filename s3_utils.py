@@ -1,14 +1,15 @@
- # see https://stackoverflow.com/a/35805441/18218031
+# see https://stackoverflow.com/a/35805441/18218031
 
 import argparse
 import os
+import re
 import sys
 import pathlib
 import filecmp
 import subprocess
 import datetime
 from time import perf_counter
-from typing import Optional, List
+from typing import List
 import boto3
 from botocore.exceptions import ClientError
 from time import perf_counter
@@ -53,7 +54,7 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
 
 def s3_upload_text_file(up_path, bucket, channel):
     '''
-    upload a text file to s3
+    upload a text file to at up_path to s3
     '''
     up_file = os.path.basename(up_path)
     s3 = boto3.resource('s3')
@@ -64,23 +65,24 @@ def s3_upload_text_file(up_path, bucket, channel):
 
 def s3_download_text_file(bucket, key, dn_path):
     '''
-    download a text file from s3
+    download a text file from s3 into dn_path
     '''
     s3 = boto3.resource('s3')
     s3.Bucket(bucket).download_file(key, dn_path)
 
 
 @s3_log_timer_info
-def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional[str], verbose: bool=False) -> List[S3KeyRow]:
+def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key_pattern: str=None, verbose: bool=False) -> List[S3KeyRow]:
     '''
     returns a list of S3KeyRows describing s3 object that match the given search criteria
     '''
     prefix_str = "" if prefix is None else prefix + "*"
     suffix_str = "" if suffix is None else "*" + suffix
+    key_pattern_str = "" if key_pattern is None else f" | egrep \"{key_pattern}\""
 
     s3_key_rows = []
     if verbose:
-        print(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}{suffix_str}")
+        print(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}{suffix_str}{key_pattern_str}")
 
     if not dir.endswith("/"):
         dir += "/"
@@ -89,17 +91,21 @@ def s3_list_files(bucket: str, dir: str, prefix: Optional[str], suffix: Optional
         Bucket=bucket,
         Prefix=dir )
 
+    regex_key_pattern = re.compile(key_pattern) if key_pattern is not None else None
+
     num_found = 0
     for i, obj in enumerate(response["Contents"]):
         key = obj['Key']
         if prefix is None or prefix in key:
             if suffix is None or suffix in key:
-                s3_key_dict = { "last_modified": obj['LastModified'], "size": obj['Size'], "key": key}
-                s3_key_row = S3KeyRow(s3_key_dict=s3_key_dict)
-                s3_key_rows.append(s3_key_row)
-                if verbose:
-                    print(key, '\t', )
-                num_found += 1
+                if regex_key_pattern is None or regex_key_pattern.search(key) is not None:
+
+                    s3_key_dict = { "last_modified": obj['LastModified'], "size": obj['Size'], "key": key}
+                    s3_key_row = S3KeyRow(s3_key_dict=s3_key_dict)
+                    s3_key_rows.append(s3_key_row)
+                    if verbose:
+                        print(key, '\t', )
+                    num_found += 1
     
     if verbose:
         print(num_found, ("file" if num_found == 1 else "files"), "found")
@@ -127,6 +133,8 @@ def s3_list_file_cli():
                         help='an optional filename prefix')
     parser.add_argument('--suffix', metavar="<suffix>",
                         help='an optional filename suffix')
+    parser.add_argument('--key_pattern', metavar="<key_pattern>",
+                        help='an optional regex key pattern')
     parser.add_argument("--verbose", "-v", help="increase output verbosity",
                         action="store_true")
 
@@ -136,9 +144,10 @@ def s3_list_file_cli():
     dir =  args['dir']
     prefix = args['prefix']
     suffix = args['suffix']
+    key_pattern = args['key_pattern']
     verbose = args['verbose']
 
-    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=verbose)
+    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=verbose)
     return len(s3_key_rows)
 
 
@@ -225,11 +234,10 @@ def test_s3_list_files():
     dir = "tuttle_twins/manifests"
     prefix = "S01E01-manifest"
     suffix = ".jl"
+    key_pattern = "2022-05-02"
 
-    result = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, verbose=False)
-
-    assert result > 0, "ERROR: s3_list_files returned zero manifest.jl files"
-
+    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
+    assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero S3KeyRows"
 
 if __name__ == "__main__":
 
@@ -242,6 +250,3 @@ if __name__ == "__main__":
     # run s3_list_file_cli if any command line args are given
     else:
         s3_list_file_cli()
-
-
-

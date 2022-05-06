@@ -9,6 +9,10 @@ import random
 from random import choices
 import datetime
 from manifest_row import ManifestRow
+from episode import Episode
+from s3_utils import find
+
+from season_service import download_all_season_episodes
 
 import typing
 from typing import Any, List, Dict
@@ -20,124 +24,276 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # This JSON file is required for Google Drive API functions.
-# This file is created manually by members of the Angel Studios Data team.
+# This file is created manually by members of the Angel Studios 
+# Data team.
 # See the README.md file for instructions
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
 
-# Create the local manifest file and store it locally in LOCAL_MANIFIESTS_DIR
+# ============================================
+# manifest MODULE OVERVIEW
 #
-# Find and download the latest version of the matching manifest file in S3 
+# episodes = season_service.load_all_season_episodes()
+# --------------------------
+# load all episodes from the episode JSON files stored within 
+# the S3 manifests directory, set 'episode_id' as 
+# 'season_code' + 'episode_code'
 # 
-# Compare the local file to the latest from s3
-# if the local file differs from the latest s3 file
-# synchronize the differences and upload the local manifest file to 
-# s3://media.angel-nft.com/tuttle_twins/manifests/
+# manifest_df = create_new_manifest_from_google(episode)
+# --------------------------
+# use google sheet data to define a new 'manifest' dataframe 
+# with columns 'episode_id', 'img_url', 'img_frame' and 'new_class'
+#
+# old_keys_df = find_all_old_keys(episode)
+# --------------------------
+# Use an S3 search to find all_keys currently in S3 with the given
+# 'episode_id'.  Parse each 'S3KeyRow' to create dataset 'old_keys' 
+# with columns 'episode_id', 'img_frame', 'old_class', 'old_folder',
+# and 'old_key'
+#
+# manifest_df = init_manifest_old_keys(episode, manifest_df)
+# --------------------------
+# Use an inner join of 'manifest' against 'old_keys' on 'img_frame' 
+# to initilize manifest columns 'old_folder', 'old_class', and 
+# 'old_key'
+#
+# manifest_df = randomize_manifest_new_keys(manifest_df)
+# --------------------------
+# Randomly assign a 'new_folder' for each 'img_frame' in 'manifest'
+# and compute 'new_key' from img_frame', 'new_class', and 'new_folder'
+#
+# manifest_df = sync_manifest(manifest_df, episode)
+# --------------------------
+# upodate manifest w/ switch:
+#   Where 'new_key' matches 'old_key' do nothing
+#
+#   Where 'new_key' is not null copy 'src_url' to 'new_key' in s3
+#
+#   Where 'old_key' is not None and does not match 'new_key', delete 
+#     'old_key' in s3 and set 'old_key' to None.
+#
+# re-run find_all_ml_keys(episode)
+#   delete any 'old_key' in S3 that have no matching 'img_frame'.
+#   Raise errors for any 'new_key' in S3 that have no matching 'img_frame'
+#
+# archive_manifest(manifest_df, episode)
+# --------------------------
+# Once all s3 changes are complete, set all 'old_key' to 'new_key',
+# clear all 'new_key' and then use season_code, episode_code and 
+# current utc_datetime_iso to save the versioned episode to the s3 
+# manifests directory, for archival purposes.
 
-def shuffle_manifest_rows(df: pd.DataFrame) -> pd.DataFrame:
-    '''
-    given a dataframe with N rows and these 2 columns, for example:
-    "img_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-20.jpg" 
-    "img_class": "Common"
-
-    return a dataframe with N rows and these 2 columns, for example:
-    "src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-20.jpg" 
-    "dst_key": "tuttle_twins/s01e01/ML/<dst_folder>/Common/TT_S01_E01_FRM-00-00-08-20.jpg"
-
-    where <dst_folder> is a random dst_folder chosen from among 3 dst_folders with probablities:
-    dst_folder_percentages = [("train", 0.70),("validate", 0.20),("test", 0.10)]
-    '''
-    dst_folder_percentages = [
-        ("train", 0.7),
-        ("validate", 0.2),
-        ("test", 0.1)
-    ]
-    dst_folders = [x[0] for x in dst_folder_percentages]
-    dst_percentages = [x[1] for x in dst_folder_percentages]
-    df['dst_folder'] = random.choices(dst_folders, weights=dst_percentages, k=len(df))
-
-    df['src_url'] = df['img_url']
-    df['season_code'] = df['src_url'].str.extract(r"tuttle_twins/(s\d\d).*") 
-    df['episode_code'] = df['src_url'].str.extract(r".*(e\d\d)/default_eng")
-    df['img_file'] = df['src_url'].str.extract(r"stamps/(TT.*jpg)")
-    df['dst_key'] = "tuttle_twins/" + df['season_code'] + df['episode_code'] + "/ML/" + df['dst_folder'] + "/" + df['img_class'] + "/" + df['img_file']
-
-    df = df[['src_url', 'dst_key']]
-    return df
-
-def count_lines(filename) :
-    with open(filename, 'r') as fp:
-        num_lines = sum(1 for line in fp)
-    return num_lines
-
-def create_unversioned_episode_manifest_rows(episode_obj: dict) -> str:
+def create_new_manifest_from_google(episode: Episode) -> Manifest:
     '''
     Read all rows of a "google episode sheet" described in the given
-    "episode_obj" into a pandas dataframe called "episode_df".
-    Compute and keep only columns 'img_url' and 'img_class'.
-    Save the "episode_df" as an unversioned "episode_manifest file"
-    in the local MANIFESTS_DIR. Each row of the "episode manifest file" 
-    is formatted as a json string of a ManifestRow dict. 
+    "episode" into "manifest_df" with columns:
+        ['episode_id', 'img_url','img_frame', 
+        'old_class (None)', 'old_folder (None)', 'old_key (None)', 
+        'new_class', 'new_folder (None)', 'new_key (None)']
     '''
     # get attributes from episode object
-    season_code = episode_obj["season_code"].upper()
-    episode_code = episode_obj["episode_code"].upper()
-    share_link = episode_obj["share_link"]
-    spreadsheet_url = episode_obj["spreadsheet_url"]
-
-    unversioed_episode_manifest_file = f"{season_code}{episode_code}-manifest.jl"
+    season_code = episode["season_code"].upper()
+    episode_code = episode["episode_code"].upper()
+    share_link = episode["share_link"]
+    spreadsheet_url = episode["spreadsheet_url"]
 
     # use the google credentials file and the episode's share_link to read
-    # the raw contents of the first sheet into episode_df
+    # the raw contents of the first sheet into manifest_df
     gc = gspread.service_account(filename=GOOGLE_CREDENTIALS_FILE)
     gsheet = gc.open_by_url(share_link)
     data = gsheet.sheet1.get_all_records()
-    episode_df = pd.DataFrame(data)
+    manifest_df = pd.DataFrame(data)
 
-    num_rows = episode_df.shape[0]
+    num_rows = manifest_df.shape[0]
     # df.info(verbose=True)
     # df.describe(include='all')
     print(f"input spread_sheet_url:{spreadsheet_url} num_rows:{num_rows}")
 
     # fetch the public 's3_thumbnails_base_url' from the name of column zero, e.g.
     #   https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/
-    s3_thumbnails_base_url = episode_df.columns[0]
+    s3_thumbnails_base_url = manifest_df.columns[0]
 
     # verify that s3_thumbnails_base_url contains 'episode_base_code', e.g. 
     #   "s01e01", which is constructed from episode properties "season_code" and "episode_code"
-    episode_base_code = episode_obj["season_code"].lower() + episode_obj["episode_code"].lower()
+    episode_base_code = episode["season_code"].lower() + episode["episode_code"].lower()
     if s3_thumbnails_base_url.find(episode_base_code) == -1:
         raise Exception(f"s3_thumbnails_base_url fails to include 'episode_base_code': {episode_base_code}")
-
-    # convert the s3_thumbnails_base_url into the s3_stamps_base_url
-    s3_stamps_base_url = s3_thumbnails_base_url.replace("thumbnails","stamps")  
 
     # verify that all rows of the "FRAME NUMBER" column contain the 'episode_frame_code', e.g. 
     #   "TT_S01_E01_FRM"  
     # example FRAME_NUMBER column: 
     #   "TT_S01_E01_FRM-00-00-08-11"
-    episode_frame_code = "TT_" + episode_obj["season_code"].upper() + "_" + episode_obj["episode_code"].upper() + "_FRM"
+    episode_frame_code = "TT_" + episode["season_code"].upper() + "_" + episode["episode_code"].upper() + "_FRM"
     matches = df[df['FRAME NUMBER'].str.contains(episode_frame_code, case=False)]
     failure_count = len(df) - len(matches)
     if failure_count > 0:
         raise Exception(f"{failure_count} rows have FRAME NUMBER values that don't contain 'episode_frame_code': {episode_frame_code}" )
 
-    # compute the "img_url" column of each row using the s3_stamps_base_url and the "FRAME_NUMBER" of that row
-    episode_df['img_url'] = s3_stamps_base_url + episode_df["FRAME NUMBER"] + ".jpg"
+    # save the episode_id
+    manifest_df['episode_id'] = episode['episode_id']
 
-    # compute the "img_class" column of each row as the first available "CLASSIFICATION" for that row or None
-    episode_df['img_class'] = \
-        np.where(depisode_df["JONNY's RECLASSIFICATION"].str.len() > 0, episode_df["JONNY's RECLASSIFICATION"],
-        np.where(episode_df["SUPERVISED CLASSIFICATION"].str.len() > 0, episode_df["SUPERVISED CLASSIFICATION"],
-        np.where(episode_df["UNSUPERVISED CLASSIFICATION"].str.len() > 0, episode_df["UNSUPERVISED CLASSIFICATION"], None)))
+    # compute the "img_url" column of each row using the s3_thumbnails_base_url and the "FRAME_NUMBER" of that row
+    manifest_df['img_url'] = s3_thumbnails_base_url + manifest_df["FRAME NUMBER"] + ".jpg"
 
-    # drop all columns except these 
-    episode_df = episode_df[['img_url','img_class']]
+    # store the "FRAME_NUMBER" column as "img_frame"
+    manifest_df['img_frame'] = manifest_df["FRAME NUMBER"]
 
-    # convert episode_df to a list of ManifestRow dicts
-    unversioned_episode_manifest_rows = episode_df.to_dict('records')
+    # these will be set from find_all_ml_keys
+    manifest_df['old_class'] = None 
+    manifest_df['old_folder'] = None
 
-    return unversioned_episode_manifest_rows
+    # this depends upon "old_folder" and "old_class"
+    manifest_df['old_key'] = None
 
+    # compute the "new_class" column as the first available "CLASSIFICATION" for that row or None
+    manifest_df['new_class'] = \
+        np.where(depisode_df["JONNY's RECLASSIFICATION"].str.len() > 0, manifest_df["JONNY's RECLASSIFICATION"],
+        np.where(manifest_df["SUPERVISED CLASSIFICATION"].str.len() > 0, manifest_df["SUPERVISED CLASSIFICATION"],
+        np.where(manifest_df["UNSUPERVISED CLASSIFICATION"].str.len() > 0, manifest_df["UNSUPERVISED CLASSIFICATION"], None)))
+
+    # this will be randomly assigned
+    manifest_df['new_folder'] = None
+
+    # this depends upon "new_folder" and "new_class"
+    manifest_df['new_key'] = None
+    
+    # drop all columns except these used by ManifestRow dict
+    manifest_df = manifest_df[
+        ['episode_id', 'img_url','img_frame',
+        'old_class','old_folder', 'old_key', 
+        'new_class', 'new_folder', 'new_key']]
+
+    return manifest_df
+
+
+def find_all_old_keys(episode: Episode) -> Manifest:
+    '''
+    Return a list of all keys to jpg files found for the given episode 
+    under the ML folder in S3
+    '''
+    bucket = S3_MEDIA_ANGEL_NFT_BUCKET
+    dir = "tuttle_twins/ML"
+    suffix = ".jpg"
+    (season_code, episode_code) = Episode.parse_codes(episode_id)
+
+    # tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg
+    all_old_keys_pattern = f"tuttle_twins/ML/\w+/w+/TT_{season_code}_{episode_code}_FRM-.*\.jpg"
+    all_old_keys_list = s3_utils.s3_list_files(bucket=bucket, dir=dir, key_pattern=all_old_keys_pattern)
+
+    all_old_keys_df = pd.DataFrame(all_old_keys_list, columns=['last_modified', 'size', 'key'])
+
+    return all_old_keys_df
+
+def init_manifest_old_keys(episode: Episode, manifest_df: Manifest) -> Manifest:
+
+    # use an inner join with all_old_keys_df() to set the 'ml_folder' column of the given episode_manifest_df
+
+    # columns of manifest_df are ['img_url','img_frame','img_class','ml_folder', 'new_ml_folder']]
+
+    # columns of all_old_keys_df are ['key', 'ml_folder', 'img_frame', 'img_class']
+    all_old_keys_df = find_all_old_keys(episode)
+
+    # expected columns of the inner join
+    expected_set  = set(['img_url','img_frame','img_class','ml_folder','new_ml_folder', 'r_key','r_ml_folder'])
+
+    joined_df = episode_manifest_df.join(
+        all_ml_keys, 
+        how='inner', 
+        on=['img_frame','img_class'], 
+        lsuffix='', 
+        rsuffix='r_', 
+        sort=False)
+
+    result_set = set(joined_df.columns)
+    assert join_columns_set == expected, f"unexpected join results: {result_set} != {expected_set}"
+
+    episode_manifest_df = joined_df
+
+    # set 'ml_folder' to 'r_ml_folder'
+    episode_manifest_df['ml_folder'] = episode_manifest_df['r_ml_folder']
+
+    # keep only the ManifestRow columns
+    episode_manifest_df = episode_manifest_df['img_url','img_frame','img_class','ml_folder', 'new_ml_folder']
+
+    return episode_manifest_df
+def randomize_manifest_new_keys(episode: Episode, manifest: pd.DataFrame) -> pd.DataFrame:
+    pass
+
+def sync_manifest(episode: Episode, manifest: pd.DataFrame) -> pd.DataFrame:
+    pass
+
+def archive_manifest(episode: Episode, manifest: pd.DataFrame):
+
+
+
+def count_lines(filename) :
+    with open(filename, 'r') as fp:
+        num_lines = sum(1 for line in fp)
+    return num_lines
+
+def get_all_ml_keys_df():
+
+    # set search criteria for all ML keys
+    bucket = S3_MEDIA_ANGEL_NFT_BUCKET
+    dir = "tuttle_twins/ML"
+    prefix = None
+    suffix = ".jpg"
+
+    all_ml_keys = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix)
+
+    # use list of S3KeyRow dict to create dataframe with S3KeyRow columns ["last_modified" , "size", "key"]
+    all_ml_keys_df = pd.DataFrame(all_ml_keys, columns=["last_modified" , "size", "key"])
+    return all_ml_keys_df
+
+
+
+
+
+
+def save_versioned_episode_manifest_file(episode: Episode) -> str:
+    '''
+    Create a json lines file with the format of ManifestRow dict and save
+    it as an unversioned episode manifest file locally.
+
+    Arguments
+    ----------
+        episode: an Episode dict for an episode in a season
+
+    Returns
+    ----------
+        the name of the local unversioned episode_manifest file
+    '''
+
+    # Use the given episode to create an episode_manifest_df with undefined 
+    # 'new_folder' and 'new_ml_folder' columns from that episode's google shet
+    episode_manifest_df = create_episode_manifest_df_from_google_sheet(episode)
+
+    # Use init_ml_folder to initialize the 'ml_folder' from the current list of all ml_keys
+    init_old_ml_folder_column(episode_manifest_df)
+
+    # compoute the path of the local unversioned manifest file
+    unversioned_episode_manifest_file = f"{LOCAL_MANIFESTS_DIR}/{season_code}{episode_code}-manifest.jl"
+
+    # Write the df as json lines of format ManifestRow dict to the local JL file
+    episode_manifest_df.to_json(unversioned_episode_manifest_file, orient='records')
+    return unversioned_episode_manifest_file
+
+
+def randomize_new_ml_folder(episode_manifest_df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Set the new_ml_folder column of teh given episode_manifest_df 
+    to a random new_folder per a percentage-wise distribution
+    '''
+    new_ml_folder_percentages = [
+        ("train", 0.7),
+        ("validate", 0.2),
+        ("test", 0.1)
+    ]
+    choices = new_ml_folders = [x[0] for x in new_ml_folder_percentages]
+    weights = new_ml_percentages = [x[1] for x in new_ml_folder_percentages]
+    k = len(episode_manifest_df)
+
+    episode_manifest_df['new_ml_folder'] = random.choices(choices, weights=weights, k=k)
+    return episode_manifest_df
 
 def compare_episode_manifests_rows(
     season_code: str, 
@@ -148,22 +304,55 @@ def compare_episode_manifests_rows(
     given local and remote list of manifest rows
     create a list of manifest action rows needed to bring
     the remote rows in sync with the local rows
+
     '''
 
-def create_change_manifest(manifest, all_remote_files):
+
+
+
+
+def df_from_episode_manifest_rows(manifest: List[ManifestRow]) -> pd.DataFrame:
+    '''
+    ManifestRow: dict {src_url: str, dst_key: str}
+    '''
+    manifest_df = pd.DataFrame(manifest,columns=['src_url', 'dst_key'])
+    manifest_df.shape
+    return manifest_df
+
+
+def create_change_manifest_df(manifest_df):
+    # manifest_df 
+    # image_frame
+    # image_class
+    # folder clurrent location
+    # new_folder future randomized 
+    dst_folder_percentages = [
+        ("train", 0.7),
+        ("validate", 0.2),
+        ("test", 0.1)
+    ]
+    dst_folders = [x[0] for x in dst_folder_percentages]
+    dst_percentages = [x[1] for x in dst_folder_percentages]
+
+    df = manifest_df.copy(deep=True)
+    # {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-19.jpg", "dst_key": "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-19.jpg"}
+
+    df['file'] = df['src_url].str.replace("")
+    change_manifest_df['dst_folder'] = random.choices(dst_folders, weights=dst_percentages, k=len(manifest_df))
+
     change_manifest = []
     for item in manifest:
         change_manifest.append(file=item.file, old_folder=item.folder, new_folder=random_folder)
     return change_manifest
 
-def create_copy_manifest(change_manifest)
+def create_copy_manifest(change_manifest):
     copy_manifest = []
     for change_item in change_manifest:
         if change_item.old_remote_folder is null and change_item.new_remote_folder is not null:
             copy_manifest.append(file=change_item.file, folder=ichange_item.new_remote_folder
     return copy_manifest
              
-def create_delete_manifest(change_manifest)
+def create_delete_manifest(change_manifest):
     delete_manifest = []
     for change_item in change_manifest:
         if change_item.old_remote_folder is not null and change_item.new_remote_folder is null:
@@ -179,7 +368,7 @@ def apply_delete_manifest(delete_manifest):
         delete(delete_item.file, delete_item.folder)
              
 
-    episode_df = shuffle_manifest_rows(episode_df)
+    manifest_df = shuffle_manifest_rows(manifest_df)
 
 
     # write all rows of manifest_jl_file to a json lines file under local_manifests_dir
@@ -238,41 +427,33 @@ def download_all_s3_episode_objs() -> List[Dict]:
         
         Returns
         -------
-            An unorderd list of all "episode dict"s gathered from
+            An unorderd list of all "Episode" dicts gathered from
             all "season manifest file"s. 
 
-            An example "episode dict" (for season 1, episode 2):
-            {
-                "season_code": "S01",
-                "episode_code": "E02",
-                "spreadsheet_title": "Tuttle Twins S01E02 Unsupervised Clustering",
-                "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
-                "share_link": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing"
-            }
-
-            An example list of all "episode dicts" gathered from all "season_manifest file"s:
+            An example list of all "Episode" dicts gathered from all "season_manifest file"s:
                 [
-                    {
+                    { # Episode dict for season 1 episode 1
                         "season_code": "S01",
                         "episode_code": "E01",
                         ...
                     },
-                    {
+                    { # Episode dict for season 1 episode 2
                         "season_code": "S01",
                         "episode_code": "E02",
                         ...
                     },
-                    {
+                    ...
+                    { # Episode dict for season 3 episode 11
                         "season_code": "S03",
                         "episode_code": "E11",
                         ...
                     },
-                    ... other episodes in other seasons
+                    ... other Episode in other seasons
                 ]
        
         Notes
         -------
-            The name of the "season_manifest file" that holds all "episode_obj"s for season 1:
+            The name of the "season_manifest file" that holds all Episode dicts for season 1:
             S01-episodes.json
 
             Example aws cli command to find all season manifest files:
@@ -295,7 +476,7 @@ def download_all_s3_episode_objs() -> List[Dict]:
         try:
             tmp_file = "/tmp/season-manifest-" + datetime.datetime.utcnow().isoformat()
             s3_download_text_file(S3_MEDIA_ANGEL_NFT_BUCKET, key, tmp_file)
-            episode_objs = json.load(tmp_file)
+            episode_objs = json.load(tmp_file) # List[Episode]
             all_episode_objs.append(episode_objs)
         finally:
             os.remove(tmp_file)
@@ -304,7 +485,7 @@ def download_all_s3_episode_objs() -> List[Dict]:
 
 def s3_download_episode_manifest_file(bucket: str, key: str) -> List[ManifestRow]:
     '''
-    download the contents of a single episode manifest file
+    download the contents of a single episode manifest file stored in s3
         Parameters
         ----------
             bucket (str)
@@ -319,7 +500,7 @@ def s3_download_episode_manifest_file(bucket: str, key: str) -> List[ManifestRow
         
         Notes
         -------
-            Example episode manifest key:
+            Example episode manifest key in s3:
             /tuttle_twins/manifests/S01E01-manifest-2022-05-02T12:43:24.662714.jl
         '''   
     # create a temp file to hold the contents of the download
@@ -418,20 +599,40 @@ def create_episode_manifest_files():
 
     all_episode_objs = download_all_s3_episode_objs
 
-    # create an episode manifest file for each episode dict
-    for episode_obj in all_episode_objs:
-        create_versioned_episode_manifest_file(episode_obj)
+    # create an episode manifest f_dfile for each episode dict
+    for episode in all_episode_objs:
+        create_versioned_episode_manifest_file(episode)
+
+def process_all_seasons() -> None:
+    all_episodes = download_all_season_episodes()
+    for episode in all_episodes:
+        manifest_df = create_new_manifest_from_google(episode)
+
+        old_keys_df = find_all_old_keys(episode)
+
+        manifest_df = init_manifest_old_keys(episode, manifest_df)
+
+        manifest_df = randomize_manifest_new_keys(manifest_df)
+
+        manifest_df = sync_manifest(manifest_df, episode)
+
+        archive_manifest(manifest_df, episode)
+
 
 # =============================================
 # TESTS
 # =============================================
+
+def test_find_all_old_keys():
+    episode = Episode({"episode_id":"S01E01", "spreadsheet_title":"", "spreadsheet_url": "", "share_link":""})
+    old_keys_df = find_all_old_keys(episode)
+    assert old_keys_df is not None and len(old_keys_df) > 0, "expected more than zero old_keys_df"
 
 def test_parse_episode_manifest_version():
     episode_management_key = "s3://media.angel-nft.com/tuttle_twins/manifests/S01E01-manifest-2022-05-02T12:43:24.662714.jl"
     expected = "2022-05-02T12:43:24.662714"
     result = parse_episode_manifest_version(episode_management_key)
     assert result == expected, f"unexpected result:{result}"
-
 
 if __name__ == "__main__":
     test_parse_episode_manifest_version()
