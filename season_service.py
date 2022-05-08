@@ -1,5 +1,5 @@
 from episode import Episode
-from s3_key_row import S3KeyRow
+from s3_key import s3_key
 import s3_utils
 
 import typing
@@ -16,7 +16,7 @@ load_dotenv()
 # season_service MODULE OVERVIEW
 #
 
-def find_all_season_keys() -> List[S3KeyRow]:
+def find_all_season_keys() -> List[s3_key]:
     '''
     Use s3_utils.s3_list_files to find
     the keys of all season json files found

@@ -12,3 +12,7 @@ class ManifestRow(TypedDict):
    new_class: str    # future class, from google sheet or None
    new_folder: str   # future folder, random selection
 
+   manifest_row_columns = \
+      ['episode_id','img_url','img_frame', \
+      'old_key','old_class','old_folder', \
+      'new_key','new_class','new_folder]

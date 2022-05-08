@@ -13,7 +13,7 @@ from typing import List
 import boto3
 from botocore.exceptions import ClientError
 from time import perf_counter
-from s3_key_row import S3KeyRow
+from s3_key import s3_key
 
 s3_client = boto3.client('s3')
 
@@ -72,9 +72,9 @@ def s3_download_text_file(bucket, key, dn_path):
 
 
 @s3_log_timer_info
-def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key_pattern: str=None, verbose: bool=False) -> List[S3KeyRow]:
+def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key_pattern: str=None, verbose: bool=False) -> List[s3_key]:
     '''
-    returns a list of S3KeyRows describing s3 object that match the given search criteria
+    returns a list of s3_key describing s3 object that match the given search criteria
     '''
     prefix_str = "" if prefix is None else prefix + "*"
     suffix_str = "" if suffix is None else "*" + suffix
@@ -101,7 +101,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
                 if regex_key_pattern is None or regex_key_pattern.search(key) is not None:
 
                     s3_key_dict = { "last_modified": obj['LastModified'], "size": obj['Size'], "key": key}
-                    s3_key_row = S3KeyRow(s3_key_dict=s3_key_dict)
+                    s3_key_row = s3_key(s3_key_dict=s3_key_dict)
                     s3_key_rows.append(s3_key_row)
                     if verbose:
                         print(key, '\t', )
@@ -152,15 +152,15 @@ def s3_list_file_cli():
 
 
 @s3_log_timer_info
-def s3_ls_recursive(path: str) -> List[S3KeyRow]:
+def s3_ls_recursive(path: str) -> List[s3_key]:
     '''
     if given <path> "s3://media.angel-nft.com/tuttle_twins/s01e01/ML/"
     makes system call "aws s3 ls --recursive <path> > <tmp_file>" 
     each line in <tmp_file>, e.g.
         "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
-    is parsed to create an S3KeyRow object, which can be converted to dict, e.g.
+    is parsed to create an s3_key object, which can be converted to dict, e.g.
         {"last_modified":"2022-05-03T19:15:44", "size":2336, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
-    return the list of all S3KeyRows as s3_key_listing
+    return the list of all s3_key as s3_key_listing
     '''
     s3_key_listing = []
     utc_datetime_iso = datetime.datetime.utcnow().isoformat()
@@ -174,7 +174,7 @@ def s3_ls_recursive(path: str) -> List[S3KeyRow]:
     
     with open(tmp_file,"r") as f:
         line = f.readline()
-        s3_key_row = S3KeyRow(s3_ls_line=line)
+        s3_key_row = s3_key(s3_ls_line=line)
         s3_key_listing.append(s3_key_row)
     
     os.remove(tmp_file)
@@ -237,7 +237,7 @@ def test_s3_list_files():
     key_pattern = "2022-05-02"
 
     s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
-    assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero S3KeyRows"
+    assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
 
 if __name__ == "__main__":
 

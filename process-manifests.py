@@ -96,7 +96,7 @@ def process_manifest_jl_files():
         process_manifest_jl_file(manifest_jl_file)
 
 @s3_timer
-def load_all_ML_s3_key_rows() -> List[S3KeyRow]:
+def load_all_ML_s3_key_rows() -> List[s3_key]:
     '''
     do an exhaustive search over the ML (machine learning) folder in s3
     of all possible tuttle_twins seasons and episodes 
