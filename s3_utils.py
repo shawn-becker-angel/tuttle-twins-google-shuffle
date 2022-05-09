@@ -9,13 +9,14 @@ import filecmp
 import subprocess
 import datetime
 from time import perf_counter
-from typing import List
+from typing import List, Tuple
 import boto3
 from botocore.exceptions import ClientError
 from time import perf_counter
 from s3_key import s3_key
 
 s3_client = boto3.client('s3')
+s3_resource = boto3.resource('s3')
 
 import logging
 logger = logging.getLogger(__name__)
@@ -57,18 +58,16 @@ def s3_upload_text_file(up_path, bucket, channel):
     upload a text file to at up_path to s3
     '''
     up_file = os.path.basename(up_path)
-    s3 = boto3.resource('s3')
     key = channel + "/" + up_file
     data = open(up_path, "rb")
-    s3.Bucket(bucket).put_object(Key=key, Body=data)
+    s3_resource.Bucket(bucket).put_object(Key=key, Body=data)
 
 
 def s3_download_text_file(bucket, key, dn_path):
     '''
     download a text file from s3 into dn_path
     '''
-    s3 = boto3.resource('s3')
-    s3.Bucket(bucket).download_file(key, dn_path)
+    s3_resource.Bucket(bucket).download_file(key, dn_path)
 
 
 @s3_log_timer_info
@@ -180,11 +179,22 @@ def s3_ls_recursive(path: str) -> List[s3_key]:
     os.remove(tmp_file)
     return s3_key_listing
 
+@s3_log_timer_info
+def s3_delete_files(bucket: str, keys: List[str]) -> None:
+    for key in keys:
+        s3_resource.Object(bucket, key).delete()
+
+@s3_log_timer_info
+def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
+    zipped_keys = zip(src_keys, dst_keys)
+    for src_key, dst_key in zipped_keys:
+        s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket dst_key=dst_key)
+    
 
 ###################################################
 # TESTS
 ###################################################
-
+    
 def test_s3_copy_file():
     '''
     {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 

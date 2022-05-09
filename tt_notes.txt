@@ -1,0 +1,63 @@
+F is NOT USED
+F = s3_find_files_df
+finds current files with the given search criteria
+F = columns=[last_modified, size, key]
+
+G = find_google_episode_keys_df(Episode)
+return a df from current google sheet
+G = columns=[episode_id, img_src, img_frame, manual new_img_class]
+G -> columns=[episode_id, img_frame, randomized new_folder, manual new_img_class]
+
+
+C = s3_find_episode_jpg_keys_df(Episode)
+find current jpg keys under tuttle_twins/ML with episode_id
+C = columns=[last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
+C -> columns=[episode_id, img_frame, folder, img_class]
+
+
+J1 = C join G on [episode_id, img_frame] to create
+J1 columns=[episode_id, img_frame, non-nullable img_class, non-nullable folder, nullable new_img_class, nullable new_folder] 
+
+
+J1 -> columns=[episode_id, img_frame, key, new_key]
+
+J1 assert key is never null
+
+J1 discard rows where key == new_key
+
+J1 where new_key is null delete key file and drop key 
+
+J1 where key != new_key copy key file to new_key file, delete key file, drop key
+
+J2 = G join C on [episode_id, img_frame] to create
+J2 = columns=[episode_id, img_frame, new_img_class, new_folder, nullable img_class, nullable folder ] 
+
+J2 assert when img_class is null then folder is null
+
+J2 -> columns [episode_id, img_frame, new_key, key]
+
+J2 assert new key is never null
+
+J2 assert size new_key == key is zero
+
+S = G columns=[episode_id, img_frame, img_src]
+
+J3 = J2 join S on [episode_id, img_frame] to create
+J3 columns = [episode_id, img_frame, new_key, key, img_src]
+
+J3 where new_key is not null and key is null copy img_src file to new_key file
+
+final check
+
+C4 = s3_find_episode_jpg_files_df(Episode)
+finds current jpg files under tuttle_twins/ML with episode_id
+C4 = columns=[last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
+C4 -> columns=[episode_id, img_frame, folder, img_class]
+
+G still has columns=[episode_id, img_frame, randomized new_folder, manual new_img_class]
+G2 -> G with columns=[episode_id, img_frame, folder, img_class]
+
+assert C4 == G2
+
+
+

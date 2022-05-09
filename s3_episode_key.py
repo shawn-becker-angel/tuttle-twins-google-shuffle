@@ -94,7 +94,33 @@ class s3_episode_key:
         df = pd.concat([df,img_frame_df], axis=1)   
 
         return df
- 
+    
+    @staticmethod
+    def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
+        # e.g. df.key = "tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+        
+        key_cols = ['tt','se','ml','folder','img_class','img_frame','ext']
+        key_df = df.key.str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
+        key_df = key_df.drop(columns=['tt','se','ml','ext'])
+        df = pd.concat([df,key_df], axis=1)
+
+        # e.g. df.folder = "validate"
+        # e.g. df.img_class = "Uncommon"
+        # e.g. df.img_frame = "TT_S01_E01_FRM-00-19-16-19"
+        
+        img_frame_cols = ['tt', 'season_code', 'episode_code', 'remainder']
+        img_frame_df = df.img_frame.str.split('_', expand=True).rename(columns = lambda x: img_frame_cols[x])
+        img_frame_df = img_frame_df.drop(columns=['tt','remainder'])
+        
+        # e.g. df.season_code = "S01"
+        # e.g. df.episode_code = "E01"
+        
+        img_frame_df['episode_id'] = img_frame_df.season_code + img_frame_df.episode_code
+        # e.g. df.episode_id = "S01E01"
+
+        df = pd.concat([df,img_frame_df], axis=1)   
+
+        return df
 
 ################################
 #  Tests
