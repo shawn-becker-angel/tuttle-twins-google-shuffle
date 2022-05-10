@@ -4,6 +4,6 @@ from typing import TypedDict
 class Season(TypedDict):
     season_code: str         # e.g. "S01"
 
-    def get_key(self) -> str:
-        return f"tuttle_twins/manifests/{self.season_code}-season.json"
+    # def get_key(self) -> str:
+    #     return f"tuttle_twins/manifests/{self.season_code}-season.json"
 

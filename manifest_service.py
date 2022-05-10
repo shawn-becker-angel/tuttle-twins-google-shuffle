@@ -95,20 +95,20 @@ def create_new_manifest_from_google(episode: Episode) -> Manifest:
     # get attributes from episode object
     season_code = episode["season_code"].upper()
     episode_code = episode["episode_code"].upper()
-    share_link = episode["share_link"]
-    spreadsheet_url = episode["spreadsheet_url"]
+    google_spreadsheet_share_link = episode["google_spreadsheet_share_link"]
+    google_spreadsheet_url = episode["google_spreadsheet_url"]
 
-    # use the google credentials file and the episode's share_link to read
+    # use the google credentials file and the episode's google_spreadsheet_share_link to read
     # the raw contents of the first sheet into manifest_df
     gc = gspread.service_account(filename=GOOGLE_CREDENTIALS_FILE)
-    gsheet = gc.open_by_url(share_link)
+    gsheet = gc.open_by_url(google_spreadsheet_share_link)
     data = gsheet.sheet1.get_all_records()
     manifest_df = pd.DataFrame(data)
 
     num_rows = manifest_df.shape[0]
     # df.info(verbose=True)
     # df.describe(include='all')
-    print(f"input spread_sheet_url:{spreadsheet_url} num_rows:{num_rows}")
+    print(f"input spread_sheet_url:{google_spreadsheet_url} num_rows:{num_rows}")
 
     # fetch the public 's3_thumbnails_base_url' from the name of column zero, e.g.
     #   https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/
@@ -656,7 +656,7 @@ def process_all_seasons() -> None:
 # =============================================
 
 def test_find_episode_keys():
-    episode = Episode({"episode_id":"S01E01", "spreadsheet_title":"", "spreadsheet_url": "", "share_link":""})
+    episode = Episode({"episode_id":"S01E01", "google_spreadsheet_title":"", "google_spreadsheet_url": "", "google_spreadsheet_share_link":""})
     episode_keys_df = find_episode_keys(episode)
     assert set(episode_keys_df.columns) == set(['last_modified', 'size', 'key'])
     assert episode_keys_df is not None and len(episode_keys_df) > 0, "expected more than zero episode_keys_df"

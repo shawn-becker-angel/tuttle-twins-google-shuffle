@@ -53,7 +53,7 @@ Click "Share" button at top right
 Under "Share with people and groups" add your `project_service_account_email` from above  
 Alert window says "You are sharing to `project_service_account_email` who is not in the Google Workspace organization that this item belongs to."  
 Click "Share anyway" link  
-Click "Copy link" and set share_link variable to this url  
+Click "Copy link" and set google_spreadsheet_share_link variable to this url  
 
 ## Data Preparation:  
 Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "episodes"
@@ -84,9 +84,9 @@ Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "e
     e. This json file consists of a list of "Episode Objects" (python dict), each with these attributes:  
       * `season_code` a string, episode's season code, example `S01`  
       * `episode_code`: a string, episode's episode number, example `E07`  
-      * `spreadsheet_title`: string title of the epiode's Google sheet  
-      * `spreadsheet_url`: URL, of the google spreadsheet, which can be used for editing by designated users only
-      * `share_link` a manually created URL, that anyone can use to view the google spreadsheet  
+      * `google_spreadsheet_title`: string title of the epiode's Google sheet  
+      * `google_spreadsheet_url`: URL, of the google spreadsheet, which can be used for editing by designated users only
+      * `google_spreadsheet_share_link` a manually created URL, that anyone can use to view the google spreadsheet  
       * TODO remove local_manifest_jl_file attribute, since each episode has many versioned episode manifest files in S3
 
 ### 3. "Versioned Episode Manifest Files" (a file of json lines):  

@@ -66,7 +66,13 @@ def s3_download_text_file(bucket, key, dn_path):
     '''
     download a text file from s3 into dn_path
     '''
+    print("s3_download_text_file.bucket", bucket)
+    print("s3_download_text_file.key", key)
+    # s3_resource = boto3.resource('s3')
     s3_resource.Bucket(bucket).download_file(key, dn_path)
+    print("s3_download_text_file.dn_path", dn_path)
+    print("s3_download_text_file.dn_path.size", os.path.getsize(dn_path))
+    print("s3_download_text_file returns")
 
 
 @s3_log_timer_info

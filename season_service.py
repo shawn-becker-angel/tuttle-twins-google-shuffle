@@ -2,6 +2,7 @@ from episode import Episode
 from s3_key import s3_key
 import s3_utils
 import datetime
+import os
 
 from typing import List
 
@@ -34,14 +35,13 @@ def download_season_episodes(season_key: str) -> List[Episode]:
     and return a list of all Episode dicts in that season json 
     file. Return empty list if season json is not found
     '''
-    tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat()
+    tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat() + ".json"
+    episodes = []
     try:
-        s3_utils.download_text_file(
+        s3_utils.s3_download_text_file(
             bucket=S3_MEDIA_ANGEL_NFT_BUCKET,
             key=season_key,
             dn_file=tmp_file)
-
-        episodes = []
 
         if os.path.exists(tmp_file):
             json_dicts = json.load(tmp_file)
@@ -57,13 +57,13 @@ def download_season_episodes(season_key: str) -> List[Episode]:
 def download_all_season_episodes() -> List[Episode]:
     '''
     Return a list of all Episodes from all season json
-    files found in the S3 manifest directory. Return an empty 
+    files (e.g. S01-season.json) found in the S3 manifest directory. Return an empty 
     list if season json files with Episode dicts are not found.
     '''
     all_episodes = []
-    season_keys = Season.find_season_keys()
+    season_keys = find_all_season_keys()
     for season_key in season_keys:
-        season_episodes = download_season_episodes(season_key)
+        season_episodes = download_season_episodes(season_key['key'])
         if season_episodes and len(season_episodes) > 0:
             for season_episode in season_episodes:
                 episode = Episode(season_episode)
@@ -85,4 +85,4 @@ def test_download_all_season_episodes():
 
 if __name__ == "__main__":
     test_find_all_season_keys()
-
+    test_download_all_season_episodes()

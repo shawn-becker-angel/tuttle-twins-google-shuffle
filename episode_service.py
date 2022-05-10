@@ -111,12 +111,12 @@ def find_google_episode_keys(episode: Episode) -> pd.DataFrame:
     '''
     # get attributes from episode object
     episode_id = episode["episode_id"]
-    share_link = episode["share_link"]
+    google_spreadsheet_share_link = episode["google_spreadsheet_share_link"]
 
-    # use the google credentials file and the episode's share_link to read
+    # use the google credentials file and the episode's google_spreadsheet_share_link to read
     # the raw contents of the first sheet into G
     gc = gspread.service_account(filename=GOOGLE_CREDENTIALS_FILE)
-    gsheet = gc.open_by_url(share_link)
+    gsheet = gc.open_by_url(google_spreadsheet_share_link)
     data = gsheet.sheet1.get_all_records()
     df = pd.DataFrame(data)
 
@@ -370,7 +370,7 @@ def main() -> None:
 # =============================================
 
 def test_s3_find_episode_jpg_keys():
-    episode = Episode({"episode_id":"S01E01", "spreadsheet_title":"", "spreadsheet_url": "", "share_link":""})
+    episode = Episode({"episode_id":"S01E01", "google_spreadsheet_title":"", "google_spreadsheet_url": "", "google_spreadsheet_share_link":""})
     C = s3_find_episode_jpg_keys(episode)
     expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
     result = set(C.columns)
