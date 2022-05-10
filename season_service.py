@@ -46,7 +46,7 @@ def download_season_episodes(season_key: str) -> List[Episode]:
         if os.path.exists(tmp_file):
             json_dicts = json.load(tmp_file)
             for json_dict in json_dicts:
-                episode = Episde(json_dict)
+                episode = Episode(json_dict)
                 episodes.append(episode)
 
     finally:

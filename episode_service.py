@@ -167,11 +167,12 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
     '''
     split df.key to add columns ['folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id']
     '''
-    # e.g. df.key = "tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+    # e.g. df.key = "tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
 
-    key_cols = ['tt','se','ml','folder','img_class','img_frame','ext']
-    key_df = df.key.str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-    key_df = key_df.drop(columns=['tt','se','ml','ext'])
+    key_cols = ['tt','ml','folder','img_class','img_frame','ext']
+    key_df = df['key'].str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
+    # DROP NOT WORKING key_df.drop(columns=['tt','ml','ext'])
+    key_df = key_df[['folder','img_class','img_frame']]
     df = pd.concat([df,key_df], axis=1)
 
     # e.g. df.folder = "validate"
@@ -180,7 +181,8 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
     
     img_frame_cols = ['tt', 'season_code', 'episode_code', 'remainder']
     img_frame_df = df.img_frame.str.split('_', expand=True).rename(columns = lambda x: img_frame_cols[x])
-    img_frame_df = img_frame_df.drop(columns=['tt','remainder'])
+    # DROP NOT WORKING img_frame_df.drop(columns=['tt','remainder'])
+    img_frame_df = img_frame_df[['season_code','episode_code']]
     
     # e.g. df.season_code = "S01"
     # e.g. df.episode_code = "E01"
@@ -217,7 +219,8 @@ def s3_find_episode_jpg_keys(episode: Episode) -> pd.DataFrame:
     # split df.key to add columns ['folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id']
     df = split_key_in_df(df)
     
-    assert df['episode_id'] == episode_id
+    # assert df['episode_id'] == episode_id
+    assert (df['episode_id'] == episode_id).all(), f"ERROR: expected 'episode_id' column to equal {episode_id}"
 
     df = df[['episode_id', 'img_frame', 'folder', 'img_class']]
     
@@ -230,13 +233,13 @@ def main() -> None:
         #-----------------------------
         G = find_google_episode_keys(episode)
         expected = set( G[['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class']] )
-        result = set(G.columns())
+        result = set(G.columns)
         assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
 
         # --------------------------
         C = s3_find_episode_jpg_keys(episode)
         expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
-        result = set(C.columns())
+        result = set(C.columns)
         assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
 
         #-------------------------
@@ -247,7 +250,7 @@ def main() -> None:
             on=['episode_id', 'img_frame'], 
             sort=False)
         expected = set(['episode_id', 'img_frame', 'img_class', 'folder', 'img_url', 'new_img_class', 'new_folder'])
-        result = set(J1.columns())
+        result = set(J1.columns)
         assert result == expected, f"ERROR: expected J1.columns: {expected} not {result}"
         
         # J1 -> columns=[episode_id, img_frame, key, new_key]
@@ -296,7 +299,7 @@ def main() -> None:
             on=['episode_id', 'img_frame'], 
             sort=False)
         expected = set(['episode_id', 'img_frame', 'new_img_class', 'new_folder','img_class', 'folder'])
-        result = set(J2.columns())
+        result = set(J2.columns)
         assert result == expected, f"ERROR: expected J2.columns: {expected} not {result}"
         
         # J2 assert when img_class is null then folder is null
@@ -327,7 +330,7 @@ def main() -> None:
             on=['episode_id', 'img_frame'], 
             sort=False)
         expected = set(['episode_id', 'img_frame', 'new_keys', 'keyr','img_src'])
-        result = set(J3.columns())
+        result = set(J3.columns)
         assert result == expected, f"ERROR: expected J3.columns: {expected} not {result}"
 
         # J3 where new_key is not null and key is null copy img_src file to new_key file
@@ -342,7 +345,7 @@ def main() -> None:
         # C4 with columns [last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
         C4 = s3_find_episode_jpg_keys(episode)
         expected = set(['last_modified', 'size', 'key', 'folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id'])
-        result = set(C4.columns())
+        result = set(C4.columns)
         assert result == expected, f"ERROR: expected C4.columns: {expected} not {result}"
         
         # C4 -> columns [episode_id, img_frame, folder, img_class]
@@ -354,7 +357,7 @@ def main() -> None:
         G2 = G
         G2 = G2.rename({'new_folder':'folder', 'new_img_class':'img_class'})
         expected = set(['episode_id', 'img_frame', 'folder', 'img_class'])
-        result = set(G2.columns())
+        result = set(G2.columns)
         assert result == expected, f"ERROR: expected G2.columns: {expected} not {result}"
 
         #-----------------------------
@@ -370,7 +373,7 @@ def test_s3_find_episode_jpg_keys():
     episode = Episode({"episode_id":"S01E01", "spreadsheet_title":"", "spreadsheet_url": "", "share_link":""})
     C = s3_find_episode_jpg_keys(episode)
     expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
-    result = set(C.columns())
+    result = set(C.columns)
     assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
     assert C is not None and len(C) > 0, "expected more than zero keys in C"
 

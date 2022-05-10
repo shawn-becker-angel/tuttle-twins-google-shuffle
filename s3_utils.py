@@ -70,7 +70,7 @@ def s3_download_text_file(bucket, key, dn_path):
 
 
 @s3_log_timer_info
-def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key_pattern: str=None, verbose: bool=False) -> List[s3_key]:
+def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key_pattern: str=None, verbose: bool=False) -> List[dict]:
     '''
     returns a list of s3_key describing s3 object that match the given search criteria
     '''
@@ -99,8 +99,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
                 if regex_key_pattern is None or regex_key_pattern.search(key) is not None:
 
                     s3_key_dict = { "last_modified": obj['LastModified'], "size": obj['Size'], "key": key}
-                    s3_key_row = s3_key(s3_key_dict=s3_key_dict)
-                    s3_key_rows.append(s3_key_row)
+                    s3_key_rows.append(s3_key_dict)
                     if verbose:
                         print(key, '\t', )
                     num_found += 1

@@ -23,7 +23,7 @@ class s3_key(TypedDict):
             '''
             Take the attributes of another s3_key dict to set attributs
             '''
-            self.last_modfied = s3_key_dict['last_modified']
+            self.last_modified = s3_key_dict['last_modified']
             self.size = s3_key_dict['size']
             self.key = s3_key_dict['key']
         else:
