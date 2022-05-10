@@ -63,7 +63,7 @@ def process_manifest_jl_file(manifest_jl_file: str) -> str:
     '''
     Each season-episode manifest_jl file has thousands of json lines, for example:
     {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 
-    "dst_key": "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
+    "dst_key": "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
 
     This function reads json lines into batches of batch_size or until all lines have been read.
     Each batch of json line/rows are processed by 'process_manifest_jl_rows'. 

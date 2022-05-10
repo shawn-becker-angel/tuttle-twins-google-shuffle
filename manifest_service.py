@@ -367,7 +367,7 @@ def randomize_new_ml_folder(manifest_df: pd.DataFrame) -> pd.DataFrame:
 #     dst_percentages = [x[1] for x in dst_folder_percentages]
 
 #     df = manifest_df.copy(deep=True)
-#     # {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-19.jpg", "dst_key": "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-19.jpg"}
+#     # {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-19.jpg", "dst_key": "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-19.jpg"}
 
 #     df['file'] = df['src_url].str.replace("")
 #     change_manifest_df['dst_folder'] = random.choices(dst_folders, weights=dst_percentages, k=len(manifest_df))
@@ -592,7 +592,7 @@ def randomize_new_ml_folder(manifest_df: pd.DataFrame) -> pd.DataFrame:
 #         aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/S01E01-manifest- | egrep ".*\.jl"
 
 #         Example json string of an episode manifest file, with ManifestLine format:
-#         {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-04.jpg", "dst_key": "tuttle_twins/s01e01/ML/validate/Legendary/TT_S01_E01_FRM-00-00-09-04.jpg"}
+#         {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-04.jpg", "dst_key": "tuttle_twins/ML/validate/Legendary/TT_S01_E01_FRM-00-00-09-04.jpg"}
 #     '''
 #     bucket = S3_MEDIA_ANGEL_NFT_BUCKET
 #     dir = "tuttle_twins/manifests"

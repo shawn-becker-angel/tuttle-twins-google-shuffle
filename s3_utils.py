@@ -151,12 +151,12 @@ def s3_list_file_cli():
 @s3_log_timer_info
 def s3_ls_recursive(path: str) -> List[s3_key]:
     '''
-    if given <path> "s3://media.angel-nft.com/tuttle_twins/s01e01/ML/"
+    if given <path> "s3://media.angel-nft.com/tuttle_twins/ML/"
     makes system call "aws s3 ls --recursive <path> > <tmp_file>" 
     each line in <tmp_file>, e.g.
-        "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+        "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
     is parsed to create an s3_key object, which can be converted to dict, e.g.
-        {"last_modified":"2022-05-03T19:15:44", "size":2336, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
+        {"last_modified":"2022-05-03T19:15:44", "size":2336, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
     return the list of all s3_key as s3_key_listing
     '''
     s3_key_listing = []
@@ -196,12 +196,12 @@ def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys
 def test_s3_copy_file():
     '''
     {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 
-    "dst_key": "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
+    "dst_key": "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
     '''
     src_bucket = "media.angel-nft.com"
     src_key = "tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg"
     dst_bucket = "media.angel-nft.com"
-    dst_key = "tuttle_twins/s01e01/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"
+    dst_key = "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"
     response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
     httpStatusCode = response['ResponseMetadata']['HTTPStatusCode']
     assert httpStatusCode == 200, f"bad httpStatusCode: {httpStatusCode}"

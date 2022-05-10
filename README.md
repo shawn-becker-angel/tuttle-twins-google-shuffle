@@ -111,7 +111,7 @@ Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "e
     c. Example:
     ```
       {  "src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-00.jpg",   
-         "dst_key": "tuttle_twins/s01e01/ML/train/Rare/TT_S01_E01_FRM-00-00-09-00.jpg"   } 
+         "dst_key": "tuttle_twins/ML/train/Rare/TT_S01_E01_FRM-00-00-09-00.jpg"   } 
     ``` 
 ### 5. `create-manifests.py` (a python module):  
     a. This python module creates an Episode Manifest File for each Episode Object defined in a Season Manifest File 
@@ -230,9 +230,9 @@ The Episode Google Sheeth has Classification columns whose values may be one of 
 This class describes attributes of each  row output from an 'aws s3 ls search'
 ```
 Example row of outpout:
-"2022-05-03 19:15:34       2715 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"  
+"2022-05-03 19:15:34       2715 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"  
 
 Parsed S3 Key Row attributes:
-{ "last_modified": "2022-05-03T19:15:34", "size": 2715, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"}
+{ "last_modified": "2022-05-03T19:15:34", "size": 2715, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"}
 ```
 

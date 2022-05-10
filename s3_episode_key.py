@@ -14,15 +14,15 @@ class s3_episode_key:
             attrs = {}
             attrs['s3_ls_line'] = s3_ls_line
 
-            # s3_ls_line = "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+            # s3_ls_line = "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
             # replace multi-spaces with single-spacs
             line = ' '.join(attrs['s3_ls_line'].split())
             
-            # line = "2022-05-03 19:15:44 2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+            # line = "2022-05-03 19:15:44 2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
             # split line into attrs columns ['date','time','size','key']
             attrs['date'], attrs['time'], attrs['size'], attrs['key'] = line.split(" ")
 
-            # attrs['key'] = "tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+            # attrs['key'] = "tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
             # split attrs['key'], keep attrs columns ['folder','img_class','img_frame'], ignore others with _
             (_, _, _, attrs['folder'], attrs['img_class'], attrs['img_frame'], _)  = re.split("/|\.", attrs['key'])
             
@@ -56,11 +56,11 @@ class s3_episode_key:
     def split_s3_ls_line_of_df(df: pd.DataFrame) -> pd.DataFrame:
         # take the s3_ls_line column of df and split it out into all s3_episode_key columns - see get_columns() above
         
-        # e.g. df.s3_ls_line = "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+        # e.g. df.s3_ls_line = "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
         
         df.s3_ls_line = df.s3_ls_line.replace(r'\s+', ' ', regex=True)
         
-        # e.g. df.s3_ls_line = "2022-05-03 19:15:44 2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+        # e.g. df.s3_ls_line = "2022-05-03 19:15:44 2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
         
         obj_cols = ['date', 'time', 'size', 'key']
         obj_df = df.s3_ls_line.str.split(' ', expand=True).rename(columns = lambda x: obj_cols[x])
@@ -70,11 +70,11 @@ class s3_episode_key:
         # e.g. df.date = "2022-05-03"
         # e.g. df.time = "19:15:44"
         # e.g. df.size = "2336"
-        # e.g. df.key = "tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+        # e.g. df.key = "tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
         
-        key_cols = ['tt','se','ml','folder','img_class','img_frame','ext']
+        key_cols = ['tt',','ml','folder','img_class','img_frame','ext']
         key_df = df.key.str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-        key_df = key_df.drop(columns=['tt','se','ml','ext'], axis=1, inplace=True)
+        key_df = key_df.drop(columns=['tt','ml','ext'], axis=1, inplace=True)
         df = pd.concat([df,key_df], axis=1)
 
         # e.g. df.folder = "validate"
@@ -97,11 +97,11 @@ class s3_episode_key:
     
     @staticmethod
     def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
-        # e.g. df.key = "tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+        # e.g. df.key = "tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
         
-        key_cols = ['tt','se','ml','folder','img_class','img_frame','ext']
+        key_cols = ['tt','ml','folder','img_class','img_frame','ext']
         key_df = df.key.str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-        key_df = key_df.drop(columns=['tt','se','ml','ext'], axis=1, inplace=True)
+        key_df = key_df.drop(columns=['tt','ml','ext'], axis=1, inplace=True)
         df = pd.concat([df,key_df], axis=1)
 
         # e.g. df.folder = "validate"

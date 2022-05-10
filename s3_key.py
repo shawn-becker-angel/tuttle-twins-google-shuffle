@@ -11,9 +11,9 @@ class s3_key(TypedDict):
         if s3_ls_line is not None:
             '''
             Take one line of the result of 'aws s3 ls --recursive <path>', e.g.
-            "2022-05-03 19:15:44       2336 tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
+            "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
             and parse it into a s3_key dict, e.g.
-            {"last_modified": 2022-05-03T19:15:44 , "size":2336, "key":"tuttle_twins/s01e01/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
+            {"last_modified": 2022-05-03T19:15:44 , "size":2336, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
             '''
             parts = s3_ls_line.split(" ")
             self.last_modified = datetime.datetime((parts[0] + "T" + parts[1]), '%Y-%m-%dT%H:%M:%S') 
