@@ -65,7 +65,7 @@ class s3_episode_key:
         obj_cols = ['date', 'time', 'size', 'key']
         obj_df = df.s3_ls_line.str.split(' ', expand=True).rename(columns = lambda x: obj_cols[x])
         df = pd.concat([df,obj_df], axis=1)
-        df = df.drop(columns=['s3_ls_line'])
+        df = df.drop(columns=['s3_ls_line'], axis=1, inplace=True)
         
         # e.g. df.date = "2022-05-03"
         # e.g. df.time = "19:15:44"
@@ -74,7 +74,7 @@ class s3_episode_key:
         
         key_cols = ['tt','se','ml','folder','img_class','img_frame','ext']
         key_df = df.key.str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-        key_df = key_df.drop(columns=['tt','se','ml','ext'])
+        key_df = key_df.drop(columns=['tt','se','ml','ext'], axis=1, inplace=True)
         df = pd.concat([df,key_df], axis=1)
 
         # e.g. df.folder = "validate"
@@ -83,7 +83,7 @@ class s3_episode_key:
         
         img_frame_cols = ['tt', 'season_code', 'episode_code', 'remainder']
         img_frame_df = df.img_frame.str.split('_', expand=True).rename(columns = lambda x: img_frame_cols[x])
-        img_frame_df = img_frame_df.drop(columns=['tt','remainder'])
+        img_frame_df = img_frame_df.drop(columns=['tt','remainder'], axis=1, inplace=True)
         
         # e.g. df.season_code = "S01"
         # e.g. df.episode_code = "E01"
@@ -101,7 +101,7 @@ class s3_episode_key:
         
         key_cols = ['tt','se','ml','folder','img_class','img_frame','ext']
         key_df = df.key.str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-        key_df = key_df.drop(columns=['tt','se','ml','ext'])
+        key_df = key_df.drop(columns=['tt','se','ml','ext'], axis=1, inplace=True)
         df = pd.concat([df,key_df], axis=1)
 
         # e.g. df.folder = "validate"
@@ -110,7 +110,7 @@ class s3_episode_key:
         
         img_frame_cols = ['tt', 'season_code', 'episode_code', 'remainder']
         img_frame_df = df.img_frame.str.split('_', expand=True).rename(columns = lambda x: img_frame_cols[x])
-        img_frame_df = img_frame_df.drop(columns=['tt','remainder'])
+        img_frame_df = img_frame_df.drop(columns=['tt','remainder'], axis=1, inplace=True)
         
         # e.g. df.season_code = "S01"
         # e.g. df.episode_code = "E01"

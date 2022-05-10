@@ -171,8 +171,8 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
 
     key_cols = ['tt','ml','folder','img_class','img_frame','ext']
     key_df = df['key'].str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-    # DROP NOT WORKING key_df.drop(columns=['tt','ml','ext'])
-    key_df = key_df[['folder','img_class','img_frame']]
+    key_df.drop(columns=['tt','ml','ext'], axis=1, inplace=True)
+    # key_df = key_df[['folder','img_class','img_frame']]
     df = pd.concat([df,key_df], axis=1)
 
     # e.g. df.folder = "validate"
@@ -181,8 +181,8 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
     
     img_frame_cols = ['tt', 'season_code', 'episode_code', 'remainder']
     img_frame_df = df.img_frame.str.split('_', expand=True).rename(columns = lambda x: img_frame_cols[x])
-    # DROP NOT WORKING img_frame_df.drop(columns=['tt','remainder'])
-    img_frame_df = img_frame_df[['season_code','episode_code']]
+    img_frame_df.drop(columns=['tt','remainder'], axis=1, inplace=True)
+    # img_frame_df = img_frame_df[['season_code','episode_code']]
     
     # e.g. df.season_code = "S01"
     # e.g. df.episode_code = "E01"
