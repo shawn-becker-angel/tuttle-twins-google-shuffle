@@ -15,9 +15,9 @@ class Episode(TypedDict):
     # example episode_key: tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg
     episode_key_regex_pattern = re.compile("^(\w+)/ML/(\w+)/(\w+)/(TT_S\d\d_E\d\d.+)\.jpg$")
     
-    episode_key_folder_pattern = r"^\w+/ML/(\w+)/\w+/TT_S\d\d_E\d\d.+\.jpg$"
-    episode_key_img_class_pattern = r"^\w+/ML/\w+/(\w+)/TT_S\d\d_E\d\d.+\.jpg$"
-    episode_key_img_frame_pattern = r"^\w+/ML/\w+/\w+/(TT_S\d\d_E\d\d.+)\.jpg$"
+    episode_key_folder_pattern = r"\w+/ML/(\w+)/\w+/TT_S\d\d_E\d\d.+\.jpg"
+    episode_key_img_class_pattern = r"\w+/ML/\w+/(\w+)/TT_S\d\d_E\d\d.+\.jpg"
+    episode_key_img_frame_pattern = r"\w+/ML/\w+/\w+/(TT_S\d\d_E\d\d.+)\.jpg"
 
     episode_key_columns = ['episode_id', 'last_modified', 'size', 'key', 'folder', 'img_class', 'img_frame']
 
@@ -71,14 +71,14 @@ def assert_name_value(name: str, result: str, expected: str) -> None:
 def test_parse_episode_key_parts():
     episode_key = "tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg"
 
-    groups = re.search(Episode.episode_key_folder_pattern, episode_key)
-    assert_name_value(name="folder", result=groups(1), expected= "validate")
+    result = re.search(Episode.episode_key_folder_pattern, episode_key)
+    assert_name_value(name="folder", result=result.group(1), expected= "validate")
     
-    groups = re.search(Episode.episode_key_img_class, episode_key)
-    assert_name_value(name="img_class", result=groups(1), expected= "Rare")
+    result = re.search(Episode.episode_key_img_class_pattern, episode_key)
+    assert_name_value(name="img_class", result=result.group(1), expected= "Rare")
 
-    groups = re.search(Episode.episode_key_img_frame, episode_key)
-    assert_name_value(name="img_frame", result=groups(1), expected= "TT_S01_E01_FRM-00-00-09-01")
+    result = re.search(Episode.episode_key_img_frame_pattern, episode_key)
+    assert_name_value(name="img_frame", result=result.group(1), expected= "TT_S01_E01_FRM-00-00-09-01")
 
     
 if __name__ == '__main__':
