@@ -1,8 +1,8 @@
 from episode import Episode
 from s3_key import s3_key
 import s3_utils
+import datetime
 
-import typing
 from typing import List
 
 from constants import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
@@ -54,7 +54,7 @@ def download_season_episodes(season_key: str) -> List[Episode]:
             os.remove(tmp_file)
         return episodes
 
-def s3_download_all_season_episodes() -> List[Episode]:
+def download_all_season_episodes() -> List[Episode]:
     '''
     Return a list of all Episodes from all season json
     files found in the S3 manifest directory. Return an empty 

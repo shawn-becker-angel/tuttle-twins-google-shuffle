@@ -4,7 +4,6 @@ import argparse
 import os
 import re
 import sys
-import pathlib
 import filecmp
 import subprocess
 import datetime
@@ -81,9 +80,9 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
 
     s3_key_rows = []
     if verbose:
-        print(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}{suffix_str}{key_pattern_str}")
+        print(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}.*{suffix_str} | egrep {key_pattern_str}")
 
-    if not dir.endswith("/"):
+    if len(dir) > 0 and not dir.endswith("/"):
         dir += "/"
 
     response = s3_client.list_objects_v2(
@@ -188,7 +187,7 @@ def s3_delete_files(bucket: str, keys: List[str]) -> None:
 def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
     zipped_keys = zip(src_keys, dst_keys)
     for src_key, dst_key in zipped_keys:
-        s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket dst_key=dst_key)
+        s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
     
 
 ###################################################
