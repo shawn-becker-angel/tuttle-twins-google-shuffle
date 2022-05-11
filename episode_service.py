@@ -9,7 +9,7 @@ import random
 from random import choices
 import datetime
 from episode import Episode
-from s3_utils import s3_list_files, s3_delete_files, s3_copy_files
+from s3_utils import s3_list_files, s3_ls_recursive, s3_delete_files, s3_copy_files
 
 from season_service import download_all_seasons_episodes
 
@@ -142,11 +142,10 @@ def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     df['img_frame'] = df["FRAME NUMBER"]
 
     # compute the "img_url" column of each row using the s3_thumbnails_base_url and the 'img_frame' of that row
-    df['img_url'] = s3_thumbnails_base_url + df['img_frame'] + ".jpg"
+    df['img_src'] = s3_thumbnails_base_url + df['img_frame'] + ".jpg"
 
-
-    # compute the "new_class" column as the first available "CLASSIFICATION" for that row or None
-    df['new_class'] = \
+    # compute the "new_img_class" column as the first available "CLASSIFICATION" for that row or None
+    df['new_img_class'] = \
         np.where(df["JONNY's RECLASSIFICATION"].str.len() > 0, df["JONNY's RECLASSIFICATION"],
         np.where(df["SUPERVISED CLASSIFICATION"].str.len() > 0, df["SUPERVISED CLASSIFICATION"],
         np.where(df["UNSUPERVISED CLASSIFICATION"].str.len() > 0, df["UNSUPERVISED CLASSIFICATION"], None)))
@@ -155,7 +154,7 @@ def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     df = add_randomized_new_folder_column(df)
     
     # keep only these columns
-    df = df[['episode_id', 'img_url','img_frame', 'new_folder', 'new_class']]
+    df = df[['episode_id', 'img_src','img_frame', 'new_folder', 'new_img_class']]
 
     return df
 
@@ -205,11 +204,12 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
 
     # example key: tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg
     episode_key_pattern = f"TT_{episode.get_split_episode_id()}_FRM-.+\.jpg"
-    
-    episode_keys_list = s3_list_files(bucket=bucket, dir=dir, key_pattern=episode_key_pattern)
+    s3_uri = f"s3://media.angel-nft.com/tuttle_twins/ML/ | egrep \"{episode_key_pattern}\""
+    s3_keys_list = s3_ls_recursive(s3_uri)
+    # episode_keys_list = s3_list_files(bucket=bucket, dir=dir, key_pattern=episode_key_pattern)
 
     # create dataframe with columns ['last_modified', 'size', 'key']
-    df = pd.DataFrame(episode_keys_list, columns=['last_modified', 'size', 'key'])
+    df = pd.DataFrame(s3_keys_list, columns=['last_modified', 'size', 'key'])
     
     # split df.key to add columns ['folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id']
     df = split_key_in_df(df)
@@ -227,12 +227,12 @@ def main() -> None:
     for episode in all_episodes:
         #-----------------------------
         G = find_google_episode_keys_df(episode)
-        expected = set( G[['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class']] )
+        expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
         result = set(G.columns)
         assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
 
         # --------------------------
-        C = s3_find_episode_jpg_keys(episode)
+        C = s3_find_episode_jpg_keys_df(episode)
         expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
         result = set(C.columns)
         assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
@@ -336,9 +336,9 @@ def main() -> None:
                       dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
 
         #-----------------------------
-        # C4 = fresh s3_find_episode_jpg_keys(episode)
+        # C4 = fresh s3_find_episode_jpg_keys_df(episode)
         # C4 with columns [last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
-        C4 = s3_find_episode_jpg_keys(episode)
+        C4 = s3_find_episode_jpg_keys_df(episode)
         expected = set(['last_modified', 'size', 'key', 'folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id'])
         result = set(C4.columns)
         assert result == expected, f"ERROR: expected C4.columns: {expected} not {result}"

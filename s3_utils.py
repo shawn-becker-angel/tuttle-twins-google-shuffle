@@ -153,10 +153,10 @@ def s3_list_file_cli():
 
 
 @s3_log_timer_info
-def s3_ls_recursive(path: str) -> List[s3_key]:
+def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
     '''
-    if given <path> "s3://media.angel-nft.com/tuttle_twins/ML/"
-    makes system call "aws s3 ls --recursive <path> > <tmp_file>" 
+    if given <s3_uri> "s3://media.angel-nft.com/tuttle_twins/ML/"
+    makes system call "aws s3 ls --recursive <s3_uri> > <tmp_file>" 
     each line in <tmp_file>, e.g.
         "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
     is parsed to create an s3_key object, which can be converted to dict, e.g.
@@ -166,7 +166,7 @@ def s3_ls_recursive(path: str) -> List[s3_key]:
     s3_key_listing = []
     utc_datetime_iso = datetime.datetime.utcnow().isoformat()
     tmp_file = "/tmp/tmp-" + utc_datetime_iso
-    cmd = "aws s3 ls --recursive " + path + " > " + tmp_file
+    cmd = "aws s3 ls --recursive " + s3_uri + " > " + tmp_file
     returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
     if returned_value != 0:
@@ -176,7 +176,7 @@ def s3_ls_recursive(path: str) -> List[s3_key]:
     with open(tmp_file,"r") as f:
         line = f.readline()
         s3_key_row = s3_key(s3_ls_line=line)
-        s3_key_listing.append(s3_key_row)
+        s3_key_listing.append(s3_key_row.as_dict())
     
     os.remove(tmp_file)
     return s3_key_listing
