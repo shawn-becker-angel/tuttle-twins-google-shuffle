@@ -9,24 +9,13 @@ import random
 from random import choices
 import datetime
 from episode import Episode
-from s3_utils import s3_list_files, s3_ls_recursive, s3_delete_files, s3_copy_files
-
+from s3_utils import s3_log_timer_info, s3_list_files, s3_ls_recursive, s3_delete_files, s3_copy_files
 from season_service import download_all_seasons_episodes
+from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR, GOOGLE_CREDENTIALS_FILE
 
-import typing
-from typing import Any, List, Dict
-
-from constants import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR
-
-# use pip install python-dotenv
-from dotenv import load_dotenv
-load_dotenv()
-
-# This JSON file is required for Google Drive API functions.
-# This file is created manually by members of the Angel Studios 
-# Data team.
-# See the README.md file for instructions
-GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
+import logging
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger("episode_service")
 
 # ============================================
 # episode_service overview
@@ -100,7 +89,7 @@ def add_randomized_new_folder_column(df: pd.DataFrame) -> pd.DataFrame:
     df['new_folder'] = random.choices(choices, weights=weights, k=k)
     return df
 
-
+@s3_log_timer_info
 def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     '''
     Read all rows of a "google episode sheet" described in the given episode into 
@@ -156,6 +145,7 @@ def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     # keep only these columns
     df = df[['episode_id', 'img_src','img_frame', 'new_folder', 'new_img_class']]
 
+    logger.info(f"find_google_episode_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
     return df
 
 def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -164,10 +154,10 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
     '''
     # e.g. df.key = "tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
 
-    key_cols = ['tt','ml','folder','img_class','img_frame','ext']
+    # added last 'n' cols in case df['key' has trailing text?
+    key_cols = ['tt','ml','folder','img_class','img_frame','ext','n1','n2']
     key_df = df['key'].str.split('/|\.', expand=True).rename(columns = lambda x: key_cols[x])
-    key_df.drop(columns=['tt','ml','ext'], axis=1, inplace=True)
-    # key_df = key_df[['folder','img_class','img_frame']]
+    key_df = key_df[['folder','img_class','img_frame']]
     df = pd.concat([df,key_df], axis=1)
 
     # e.g. df.folder = "validate"
@@ -189,6 +179,7 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+@s3_log_timer_info
 def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     '''
     find current jpg keys under tuttle_twins/ML with episode_id
@@ -214,11 +205,13 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     # split df.key to add columns ['folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id']
     df = split_key_in_df(df)
     
-    # assert df['episode_id'] == episode_id
-    assert (df['episode_id'] == episode_id).all(), f"ERROR: expected 'episode_id' column to equal {episode_id}"
+    df['episode_id'] = episode_id
+    num_ne = len(df[df['episode_id'].ne(episode_id)])
+    assert num_ne == 0, f"ERROR: {num_ne} rows don't have episode_id"
 
     df = df[['episode_id', 'img_frame', 'folder', 'img_class']]
     
+    logger.info(f"s3_find_episode_jpg_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
     return df
 
 
@@ -240,11 +233,11 @@ def main() -> None:
         #-------------------------
         # J1 = C join G on [episode_id, img_frame] to create
         # J1 with columns [episode_id, img_frame, non-nullable img_class, non-nullable folder, nullable new_img_class, nullable new_folder]         
-        J1 = C.join(G,  
+        J1 = C.merge(G,  
             how='inner', 
             on=['episode_id', 'img_frame'], 
             sort=False)
-        expected = set(['episode_id', 'img_frame', 'img_class', 'folder', 'img_url', 'new_img_class', 'new_folder'])
+        expected = set(['episode_id', 'img_frame', 'img_class', 'folder', 'img_src', 'new_img_class', 'new_folder'])
         result = set(J1.columns)
         assert result == expected, f"ERROR: expected J1.columns: {expected} not {result}"
         
@@ -254,42 +247,52 @@ def main() -> None:
         J1 = J1[['episode_id', 'img_frame', 'key', 'new_key']]
         
         # J1 discard rows where key == new_key
-        J1 = J1[J1['key'] != J1['new_key']]
+        # keep only rows where key != new_key
+        J1 = J1[J1['key'].ne(J1['new_key'])]
 
         # J1 where new_key is null delete key file 
-        J1_del = J1.dropna(subset=['new_key'])
-        # tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg 
-        J1_del['del_key'] = "tuttle_twins/ML/" + J1_del['key'] + '/' + J1_del['img_frame'] + ".jpg"
-        del_keys = list(J1_del['del_key'].to_numpy())
-        s3_delete_files(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, keys=del_keys)
+        J1_del = J1[J1['new_key'].eq(None)]
+        if len(J1_del) > 0:
+            # tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg 
+            J1_del['del_key'] = "tuttle_twins/ML/" + J1_del['key'] + '/' + J1_del['img_frame'] + ".jpg"
+            del_keys = list(J1_del['del_key'].to_numpy())
+            s3_delete_files(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, keys=del_keys)
         
-        # discard J1 rows with key in del_keys
-        # keep only J1 rows with key not in del_keys
-        J1 = J1[J1['key'] not in del_keys]
+            # discard J1 rows with key in del_keys
+            # keep only J1 rows with key not in del_keys
+            J1 = J1[~J1['key'].isin(del_keys)]
 
         # J1 where key != new_key copy key file to new_key file, delete key file
-        J1_cp = J1[(J1['key'] is not None) and (J1['new_key'] is not None) and (J1['key'] != J1['new_key'])]
-        J1_cp['src_key'] = "tuttle_twins/ML/" + J1_cp['key'] + '/' + J1_del['img_frame'] + ".jpg"
-        J1_cp['dst_key'] = "tuttle_twins/ML/" + J1_cp['new_key'] + '/' + J1_del['img_frame'] + ".jpg"
-        J1_cp = J1_cp[['src_key','dst_key']]
-        src_keys = list(J1_cp['src_key'].to_numpy())
-        dst_keys = list(J1_cp['dst_key'].to_numpy())
-        s3_copy_files(src_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, src_keys=src_keys, 
-                      dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
-        del_keys = src_keys
-        s3_delete_files(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, keys=del_keys)
+        J1_cp = J1[J1['key'].ne(None) & J1['new_key'].ne(None) & J1['key'].ne(J1['new_key'])]
+        if len(J1_cp) > 0:
+            J1_cp['src_key'] = "tuttle_twins/ML/" + J1_cp['key'] + '/' + J1_del['img_frame'] + ".jpg"
+            J1_cp['dst_key'] = "tuttle_twins/ML/" + J1_cp['new_key'] + '/' + J1_del['img_frame'] + ".jpg"
+            J1_cp = J1_cp[['src_key','dst_key']]
+            src_keys = list(J1_cp['src_key'].to_numpy())
+            dst_keys = list(J1_cp['dst_key'].to_numpy())
+            s3_copy_files(src_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, src_keys=src_keys, 
+                        dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
+            del_keys = src_keys
+            s3_delete_files(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, keys=del_keys)
         
-        # discard J1 rows with key in del_keys
-        # keep only J1 rows with key not in del_keys
-        J1 = J1[J1['key'] not in del_keys]
+            # discard J1 rows with key in del_keys
+            # keep only J1 rows with key not in del_keys
+            J1 = J1[~J1['key'].isin(del_keys)]
 
         #-----------------------------
         # J2 = G join C on [episode_id, img_frame] to create
         # J2 = columns=[episode_id, img_frame, new_img_class, new_folder, nullable img_class, nullable folder ] 
         # J2 assert when img_class is null then folder is null
         # J2 -> columns [episode_id, img_frame, new_key, key]
-                
-        J2 = G.join(C,  
+        
+        expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
+        result = set(G.columns)
+        assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
+
+        # G2 is G without img_src
+        G2 = G[['episode_id', 'img_frame', 'new_img_class', 'new_folder']]
+
+        J2 = G2.merge(C,  
             how='inner', 
             on=['episode_id', 'img_frame'], 
             sort=False)
@@ -300,9 +303,9 @@ def main() -> None:
         # J2 assert when img_class is null then folder is null
         # find J2a rows where img_class is null and folder is not null
         # find J2b rows where img_class is not null and folder is null
-        J2a = J2[J2['img_class'] is None and J2['folder'] is not None]
+        J2a = J2[J2['img_class'].eq(None) & J2['folder'].ne(None)]
         assert(len(J2a) == 0)
-        J2b = J2[J2['img_class'] is not None and J2['folder'] is None]
+        J2b = J2[J2['img_class'].ne(None) & J2['folder'].eq(None)]
         assert(len(J2b) == 0)
         
         # J2 -> columns [episode_id, img_frame, new_key, key]
@@ -310,26 +313,25 @@ def main() -> None:
         J2['key'] = J2['folder'] + '/' + J2['img_class']
         J2 = J2[['episode_id', 'img_frame', 'new_key', 'key']]
 
-        # J2 assert size new_key == key is zero
-        # J2 keep only rows where new_key != key and verify same length
-        len1 = len(J2)
-        J2 = J2[J2['new_key'] != J2['key']]
-        assert len(J2) == len1
+        # J2 keep only rows where new_key != key
+        J2 = J2[J2['new_key'].ne(J2['key'])]
 
         #-----------------------------
-        # J3 = J2 join S on [episode_id, img_frame] to create
+        # G3 keeps img_src
+        G3 = G[['episode_id', 'img_frame', 'img_src']]
+
+        # J3 = J2 join G3 on [episode_id, img_frame] to create
         # J3 with columns = [episode_id, img_frame, new_key, key, img_src]
-        S = G[['episode_id', 'img_frame', 'img_src']]
-        J3 = J2.join(S,  
+        J3 = J2.merge(G3,  
             how='inner', 
             on=['episode_id', 'img_frame'], 
             sort=False)
-        expected = set(['episode_id', 'img_frame', 'new_keys', 'keyr','img_src'])
+        expected = set(['episode_id', 'img_frame', 'new_key', 'key', 'img_src'])
         result = set(J3.columns)
         assert result == expected, f"ERROR: expected J3.columns: {expected} not {result}"
 
         # J3 where new_key is not null and key is null copy img_src file to new_key file
-        J3_cp = J3[J3['new_key'] is not None and J3['key'] is None]
+        J3_cp = J3[J3['new_key'].ne(None) & J3['key'].eq(None)]
         src_keys = J3_cp[J3_cp['img_src']]
         dst_keys = J3_cp[J3_cp['new_key']]
         s3_copy_files(src_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, src_keys=src_keys, 
@@ -339,18 +341,15 @@ def main() -> None:
         # C4 = fresh s3_find_episode_jpg_keys_df(episode)
         # C4 with columns [last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
         C4 = s3_find_episode_jpg_keys_df(episode)
-        expected = set(['last_modified', 'size', 'key', 'folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id'])
+        expected = set(['episode_id', 'img_frame', 'folder', 'img_class'])
         result = set(C4.columns)
         assert result == expected, f"ERROR: expected C4.columns: {expected} not {result}"
         
-        # C4 -> columns [episode_id, img_frame, folder, img_class]
-        C4 = C4[['episode_id', 'img_frame', 'folder', 'img_class']]
-
         #-----------------------------
         # G still has columns [episode_id, img_frame, new_folder, new_img_class]
         # G2 -> G with columns [episode_id, img_frame, folder, img_class]
-        G2 = G
-        G2 = G2.rename({'new_folder':'folder', 'new_img_class':'img_class'})
+        G2 = G[['episode_id', 'img_frame', 'new_folder', 'new_img_class']]
+        G2 = G2.rename(columns={'new_folder':'folder', 'new_img_class':'img_class'})
         expected = set(['episode_id', 'img_frame', 'folder', 'img_class'])
         result = set(G2.columns)
         assert result == expected, f"ERROR: expected G2.columns: {expected} not {result}"
@@ -366,7 +365,7 @@ def main() -> None:
 
 def test_s3_find_episode_jpg_keys_df():
     episode = Episode({"episode_id":"S01E01", "google_spreadsheet_title":"", "google_spreadsheet_url": "", "google_spreadsheet_share_link":""})
-    C = s3_find_episode_jpg_keys_df(episode)
+    C = s3_find_episode_jpg_keys_df(episode, max_keys=1000)
     expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
     result = set(C.columns)
     assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"

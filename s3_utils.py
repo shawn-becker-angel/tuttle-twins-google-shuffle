@@ -18,7 +18,8 @@ s3_client = boto3.client('s3')
 s3_resource = boto3.resource('s3')
 
 import logging
-logger = logging.getLogger(__name__)
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger("s3_utils")
 
 def s3_log_timer_info(func):
     '''
@@ -28,9 +29,10 @@ def s3_log_timer_info(func):
         t1 = perf_counter()
         result = func(*args, **kwargs)
         elapsed = perf_counter() - t1
-        logger.info(f'{func.__name__!r} executed in {elapsed:.6f}s')
+        logger.info(f"*** {func.__name__} executed in {elapsed:.6f}s ***")
         return result
     return wrap_func
+
 
 def s3_file_exists(bucket: str, key: str):
     '''Return True if s3 file exists'''
@@ -39,6 +41,7 @@ def s3_file_exists(bucket: str, key: str):
         return True
     except ClientError:
         return False
+
 
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
     '''Return the response dict'''
@@ -56,27 +59,33 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
         else:
             raise
 
+
 @s3_log_timer_info
 def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
-    try:
-        zipped_keys = zip(src_keys, dst_keys)
-        for src_key, dst_key in zipped_keys:
-            s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
-    except Exception as exp:
-        print(type(exp),str(exp))
-        raise
+    logger.info(f"MOCK s3_copy_files() {len(src_keys)} src files to {len(dst_keys)} destinations")
+    # try:
+    #     zipped_keys = zip(src_keys, dst_keys)
+    #     for src_key, dst_key in zipped_keys:
+    #         s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
+    # except Exception as exp:
+    #     logger.error(type(exp),str(exp))
+    #     raise
+
 
 def s3_delete_file(bucket: str, key: str) -> None:
     try:
         s3_resource.Object(bucket, key).delete()
     except Exception as exp:
-        print(type(exp),str(exp))
+        logger.error(type(exp),str(exp))
         raise
+
 
 @s3_log_timer_info
 def s3_delete_files(bucket: str, keys: List[str]) -> None:
-    for key in keys:
-        s3_resource.Object(bucket, key).delete()
+    logger.info(f"MOCK s3_delete_files() {len(keys)} files")
+    # for key in keys:
+    #     s3_resource.Object(bucket, key).delete()
+
 
 def s3_upload_text_file(up_path: str, bucket: str, channel: str):
     '''
@@ -95,7 +104,7 @@ def s3_download_text_file(bucket: str, key: str, dn_path: str):
     try:
         s3_resource.Bucket(bucket).download_file(key, dn_path)
     except Exception as exp:
-        print(type(exp), str(exp))
+        logger.error(type(exp), str(exp))
         raise
 
 
@@ -110,7 +119,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
 
     s3_key_rows = []
     if verbose:
-        print(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}.*{suffix_str} | egrep {key_pattern_str}")
+        logger.info(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}.*{suffix_str} | egrep {key_pattern_str}")
 
     if len(dir) > 0 and not dir.endswith("/"):
         dir += "/"
@@ -131,11 +140,11 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
                     s3_key_dict = { "last_modified": obj['LastModified'], "size": obj['Size'], "key": key}
                     s3_key_rows.append(s3_key_dict)
                     if verbose:
-                        print(key, '\t', )
+                        print(key, '\t')
                     num_found += 1
     
     if verbose:
-        print(num_found, ("file" if num_found == 1 else "files"), "found", "from s3_list_files")
+        logger.info(f"s3_list_files() found:{len(s3_key_rows)}")
 
     return s3_key_rows
 
@@ -193,6 +202,7 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
     utc_datetime_iso = datetime.datetime.utcnow().isoformat()
     tmp_file = "/tmp/tmp-" + utc_datetime_iso
     cmd = "aws s3 ls --recursive " + s3_uri + " > " + tmp_file
+    logger.info(f"s3_ls_recursive() cmd:{cmd}")
     returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
     if returned_value != 0:
@@ -200,13 +210,14 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
         return []
     
     with open(tmp_file,"r") as f:
-        line = f.readline()
-        s3_key_row = s3_key(s3_ls_line=line)
-        s3_key_listing.append(s3_key_row.as_dict())
+        for line in f:
+            s3_key_row = s3_key(s3_ls_line=line)
+            s3_key_listing.append(s3_key_row.as_dict())
     
     os.remove(tmp_file)
-    return s3_key_listing
+    logger.info(f"s3_ls_recursive() found:{len(s3_key_listing)}")
 
+    return s3_key_listing
     
 
 ###################################################
@@ -236,6 +247,7 @@ def test_s3_copy_file():
     s3_delete_file(dst_bucket, dst_key)
     assert not s3_file_exists(dst_bucket, dst_key), f"ERROR: dst file not deleted"
 
+
 def test_s3_upload_download():
     tmp_dir = "/tmp"
     test_up_path = os.path.join(tmp_dir, "test_up.txt")
@@ -261,6 +273,7 @@ def test_s3_upload_download():
     os.remove(test_up_path)
     os.remove(test_dn_path)
 
+
 def test_s3_list_files():
     '''
     test s3_list_files using hard-coded values
@@ -275,6 +288,7 @@ def test_s3_list_files():
 
     s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
     assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
+
 
 def test_s3_ls_recursive():
     prefix = "tuttle_twins/ML/test/Common"
@@ -292,6 +306,7 @@ if __name__ == "__main__":
         test_s3_copy_file()
         test_s3_upload_download()
         test_s3_list_files()
+        # test_s3_ls_recursive()
     
     # run s3_list_file_cli if any command line args are given
     else:

@@ -7,7 +7,7 @@ import json
 
 from typing import List
 
-from constants import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
+from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
 
 # use pip install python-dotenv
 from dotenv import load_dotenv

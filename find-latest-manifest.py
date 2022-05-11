@@ -4,7 +4,7 @@ import re
 import os
 import boto3
 import manifest_row
-from constants import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
+from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
 
 from s3_utils import s3_download_text_file
 
