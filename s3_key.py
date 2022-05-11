@@ -29,7 +29,15 @@ class s3_key:
             print(type(exp),str(exp))
             raise
 
+    def get_last_modified(self):
+        return self.last_modified
 
+    def get_size(self):
+        return self.size
+        
+    def get_key(self):
+        return self.key
+        
     def as_dict(self):
         '''
         Return an explicit s3_key dict

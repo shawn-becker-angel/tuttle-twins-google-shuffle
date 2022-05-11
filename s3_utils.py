@@ -32,11 +32,16 @@ def s3_log_timer_info(func):
         return result
     return wrap_func
 
+def s3_file_exists(bucket: str, key: str):
+    '''Return True if s3 file exists'''
+    try:
+        s3_client.head_object(Bucket=bucket, Key=key)
+        return True
+    except ClientError:
+        return False
 
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
-    '''
-    returns the response dict
-    '''
+    '''Return the response dict'''
     try:
         response = s3_client.copy_object(
             CopySource={'Bucket': src_bucket, 'Key': src_key}, 
@@ -51,6 +56,27 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
         else:
             raise
 
+@s3_log_timer_info
+def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
+    try:
+        zipped_keys = zip(src_keys, dst_keys)
+        for src_key, dst_key in zipped_keys:
+            s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
+    except Exception as exp:
+        print(type(exp),str(exp))
+        raise
+
+def s3_delete_file(bucket: str, key: str) -> None:
+    try:
+        s3_resource.Object(bucket, key).delete()
+    except Exception as exp:
+        print(type(exp),str(exp))
+        raise
+
+@s3_log_timer_info
+def s3_delete_files(bucket: str, keys: List[str]) -> None:
+    for key in keys:
+        s3_resource.Object(bucket, key).delete()
 
 def s3_upload_text_file(up_path: str, bucket: str, channel: str):
     '''
@@ -181,16 +207,6 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
     os.remove(tmp_file)
     return s3_key_listing
 
-@s3_log_timer_info
-def s3_delete_files(bucket: str, keys: List[str]) -> None:
-    for key in keys:
-        s3_resource.Object(bucket, key).delete()
-
-@s3_log_timer_info
-def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
-    zipped_keys = zip(src_keys, dst_keys)
-    for src_key, dst_key in zipped_keys:
-        s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
     
 
 ###################################################
@@ -199,17 +215,26 @@ def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys
     
 def test_s3_copy_file():
     '''
-    {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 
-    "dst_key": "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
+    "src_url": "s3://media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-00-03.jpg", 
+    "src_key": "tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-00-03.jpg", 
+    "dst_key": "tuttle_twins/ML/deleteme/test.jpg"
     '''
     src_bucket = "media.angel-nft.com"
-    src_key = "tuttle_twins/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg"
+    src_key = "tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-00-03.jpg"
     dst_bucket = "media.angel-nft.com"
-    dst_key = "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"
-    response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
-    httpStatusCode = response['ResponseMetadata']['HTTPStatusCode']
-    assert httpStatusCode == 200, f"bad httpStatusCode: {httpStatusCode}"
+    dst_key = "tuttle_twins/ML/deleteme/test.jpg"
 
+    assert s3_file_exists(src_bucket, src_key), f"ERROR: src file does not exist"
+
+    response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
+    assert 'ResponseMetadata' in response, f"ERROR: no ResponseMetaData key"
+    assert 'HTTPStatusCode' in response['ResponseMetadata'], f"ERROR: no HTTPStatusCode key"
+    httpStatusCode = response['ResponseMetadata']['HTTPStatusCode']
+    assert httpStatusCode == 200, f"ERROR: bad httpStatusCode: {httpStatusCode}"
+
+    assert s3_file_exists(dst_bucket, dst_key), f"ERROR: dst file does not exist"
+    s3_delete_file(dst_bucket, dst_key)
+    assert not s3_file_exists(dst_bucket, dst_key), f"ERROR: dst file not deleted"
 
 def test_s3_upload_download():
     tmp_dir = "/tmp"
@@ -250,6 +275,15 @@ def test_s3_list_files():
 
     s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
     assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
+
+def test_s3_ls_recursive():
+    prefix = "tuttle_twins/ML/test/Common"
+    episode_key_pattern = f"TT_S01_E01_FRM-.+\.jpg"
+    s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep \"{episode_key_pattern}\""
+    s3_keys = s3_ls_recursive(s3_uri)
+    assert len(s3_keys) > 0
+    for s3_key in s3_keys:
+        assert prefix in s3_key.get_key()
 
 if __name__ == "__main__":
 
