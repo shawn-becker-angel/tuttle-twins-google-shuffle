@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
    local_jl_file = "/tmp/latest.jl"
 
-   s3_download_text_file(S3_MEDIA_ANGEL_NFT_BUCKET, s3_latest['key'], local_jl_file)
+   s3_download_text_file(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, key=s3_latest['key'], dn_path=local_jl_file)
 
    # print the first 10 lines of  local_jl_file
    with open(local_jl_file, "r") as f:

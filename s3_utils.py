@@ -52,7 +52,7 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
             raise
 
 
-def s3_upload_text_file(up_path, bucket, channel):
+def s3_upload_text_file(up_path: str, bucket: str, channel: str):
     '''
     upload a text file to at up_path to s3
     '''
@@ -62,17 +62,15 @@ def s3_upload_text_file(up_path, bucket, channel):
     s3_resource.Bucket(bucket).put_object(Key=key, Body=data)
 
 
-def s3_download_text_file(bucket, key, dn_path):
+def s3_download_text_file(bucket: str, key: str, dn_path: str):
     '''
     download a text file from s3 into dn_path
     '''
-    print("s3_download_text_file.bucket", bucket)
-    print("s3_download_text_file.key", key)
-    # s3_resource = boto3.resource('s3')
-    s3_resource.Bucket(bucket).download_file(key, dn_path)
-    print("s3_download_text_file.dn_path", dn_path)
-    print("s3_download_text_file.dn_path.size", os.path.getsize(dn_path))
-    print("s3_download_text_file returns")
+    try:
+        s3_resource.Bucket(bucket).download_file(key, dn_path)
+    except Exception as exp:
+        print(type(exp), str(exp))
+        raise
 
 
 @s3_log_timer_info
@@ -111,7 +109,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
                     num_found += 1
     
     if verbose:
-        print(num_found, ("file" if num_found == 1 else "files"), "found")
+        print(num_found, ("file" if num_found == 1 else "files"), "found", "from s3_list_files")
 
     return s3_key_rows
 
@@ -155,10 +153,10 @@ def s3_list_file_cli():
 
 
 @s3_log_timer_info
-def s3_ls_recursive(path: str) -> List[s3_key]:
+def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
     '''
-    if given <path> "s3://media.angel-nft.com/tuttle_twins/ML/"
-    makes system call "aws s3 ls --recursive <path> > <tmp_file>" 
+    if given <s3_uri> "s3://media.angel-nft.com/tuttle_twins/ML/"
+    makes system call "aws s3 ls --recursive <s3_uri> > <tmp_file>" 
     each line in <tmp_file>, e.g.
         "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
     is parsed to create an s3_key object, which can be converted to dict, e.g.
@@ -168,7 +166,7 @@ def s3_ls_recursive(path: str) -> List[s3_key]:
     s3_key_listing = []
     utc_datetime_iso = datetime.datetime.utcnow().isoformat()
     tmp_file = "/tmp/tmp-" + utc_datetime_iso
-    cmd = "aws s3 ls --recursive " + path + " > " + tmp_file
+    cmd = "aws s3 ls --recursive " + s3_uri + " > " + tmp_file
     returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
     if returned_value != 0:
@@ -178,7 +176,7 @@ def s3_ls_recursive(path: str) -> List[s3_key]:
     with open(tmp_file,"r") as f:
         line = f.readline()
         s3_key_row = s3_key(s3_ls_line=line)
-        s3_key_listing.append(s3_key_row)
+        s3_key_listing.append(s3_key_row.as_dict())
     
     os.remove(tmp_file)
     return s3_key_listing
@@ -201,11 +199,11 @@ def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys
     
 def test_s3_copy_file():
     '''
-    {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 
+    {"src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg", 
     "dst_key": "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"}
     '''
     src_bucket = "media.angel-nft.com"
-    src_key = "tuttle_twins/s01e01/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg"
+    src_key = "tuttle_twins/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-08-15.jpg"
     dst_bucket = "media.angel-nft.com"
     dst_key = "tuttle_twins/ML/train/Common/TT_S01_E01_FRM-00-00-08-15.jpg"
     response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
@@ -224,11 +222,11 @@ def test_s3_upload_download():
     bucket = "media.angel-nft.com"
     channel = "tuttle_twins/manifests"
 
-    s3_upload_text_file(test_up_path, bucket, channel)
+    s3_upload_text_file(up_path=test_up_path, bucket=bucket, channel=channel)
 
     up_file = os.path.basename(test_up_path)
     key = f"{channel}/{up_file}"
-    s3_download_text_file(bucket, key, test_dn_path)
+    s3_download_text_file(bucket=bucket, key=key, dn_path=test_dn_path)
 
     # deep comparison
     result = filecmp.cmp(test_up_path, test_dn_path, shallow=False)
