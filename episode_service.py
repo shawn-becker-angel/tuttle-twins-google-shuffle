@@ -8,12 +8,10 @@ import json
 import random
 from random import choices
 import datetime
-
-# from pkg_resources import get_default_cache
 from episode import Episode
 from s3_utils import s3_list_files, s3_delete_files, s3_copy_files
 
-from season_service import download_all_season_episodes
+from season_service import download_all_seasons_episodes
 
 import typing
 from typing import Any, List, Dict
@@ -40,12 +38,12 @@ GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
 # the S3 manifests directory, set 'episode_id' as 
 # 'season_code' + 'episode_code'
  
-# G = find_google_episode_keys(episode)
+# G = find_google_episode_keys_df(episode)
 # --------------------------
 # use google sheet data for episode_id to define 
 # G with columns [episode_id, img_src, img_frame, randomized new_folder, manual new_img_class]
 
-# C = s3_find_episode_jpg_keys(episode)
+# C = s3_find_episode_jpg_keys_df(episode)
 # --------------------------
 # finds current jpg keys under tuttle_twins/ML with episode_id
 # C with columns [last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
@@ -75,7 +73,7 @@ GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
 # J3 where new_key is not null and key is null copy img_src file to new_key file
 
 #-----------------------------
-# C4 =  fresh s3_find_episode_jpg_keys(episode)
+# C4 =  fresh s3_find_episode_jpg_keys_df(episode)
 # C4 with columns [last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
 # C4 -> columns [episode_id, img_frame, folder, img_class]
 
@@ -103,20 +101,18 @@ def add_randomized_new_folder_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def find_google_episode_keys(episode: Episode) -> pd.DataFrame:
+def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     '''
     Read all rows of a "google episode sheet" described in the given episode into 
     G with columns=[episode_id, img_src, img_frame, manual new_img_class]
     then add randomized new_folder column
     '''
-    # get attributes from episode object
-    episode_id = episode["episode_id"]
-    share_link = episode["share_link"]
+    episode_id = episode.get_episode_id()
 
-    # use the google credentials file and the episode's share_link to read
+    # use the google credentials file and the episode's google_spreadsheet_share_link to read
     # the raw contents of the first sheet into G
     gc = gspread.service_account(filename=GOOGLE_CREDENTIALS_FILE)
-    gsheet = gc.open_by_url(share_link)
+    gsheet = gc.open_by_url(episode.get_google_spreadsheet_share_link())
     data = gsheet.sheet1.get_all_records()
     df = pd.DataFrame(data)
 
@@ -133,21 +129,21 @@ def find_google_episode_keys(episode: Episode) -> pd.DataFrame:
     #   "TT_S01_E01_FRM"  
     # example FRAME_NUMBER column: 
     #   "TT_S01_E01_FRM-00-00-08-11"
-    season_code, episode_code = Episode.parse_episode_id(episode_id)
-    episode_frame_code = ("TT_" + season_code + "_" + episode_code + "_FRM").upper()
+    episode_frame_code = ("TT_" + episode.get_split_episode_id() + "_FRM").upper()
     matches = df[df['FRAME NUMBER'].str.contains(episode_frame_code, case=False)]
     failure_count = len(df) - len(matches)
     if failure_count > 0:
         raise Exception(f"{failure_count} rows have FRAME NUMBER values that don't contain 'episode_frame_code': {episode_frame_code}" )
 
-    # save the episode_id
+    # save the episode_id in all rows
     df['episode_id'] = episode_id
-
-    # compute the "img_url" column of each row using the s3_thumbnails_base_url and the "FRAME_NUMBER" of that row
-    df['img_url'] = s3_thumbnails_base_url + df["FRAME NUMBER"] + ".jpg"
 
     # store the "FRAME_NUMBER" column as "img_frame"
     df['img_frame'] = df["FRAME NUMBER"]
+
+    # compute the "img_url" column of each row using the s3_thumbnails_base_url and the 'img_frame' of that row
+    df['img_url'] = s3_thumbnails_base_url + df['img_frame'] + ".jpg"
+
 
     # compute the "new_class" column as the first available "CLASSIFICATION" for that row or None
     df['new_class'] = \
@@ -155,7 +151,7 @@ def find_google_episode_keys(episode: Episode) -> pd.DataFrame:
         np.where(df["SUPERVISED CLASSIFICATION"].str.len() > 0, df["SUPERVISED CLASSIFICATION"],
         np.where(df["UNSUPERVISED CLASSIFICATION"].str.len() > 0, df["UNSUPERVISED CLASSIFICATION"], None)))
     
-    # add randomized column 'new_folder'
+    # add the randomized column 'new_folder'
     df = add_randomized_new_folder_column(df)
     
     # keep only these columns
@@ -194,7 +190,7 @@ def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def s3_find_episode_jpg_keys(episode: Episode) -> pd.DataFrame:
+def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     '''
     find current jpg keys under tuttle_twins/ML with episode_id
     C = columns=[last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
@@ -205,11 +201,10 @@ def s3_find_episode_jpg_keys(episode: Episode) -> pd.DataFrame:
     suffix = ".jpg"
     
     # example episode_id: S01E01, split_episode_id: S01_E01
-    episode_id = episode['episode_id']
-    split_episode_id = Episode.split_episode_id(episode_id)
+    episode_id = episode.get_episode_id()
 
     # example key: tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg
-    episode_key_pattern = f"TT_{split_episode_id}_FRM-.+\.jpg"
+    episode_key_pattern = f"TT_{episode.get_split_episode_id()}_FRM-.+\.jpg"
     
     episode_keys_list = s3_list_files(bucket=bucket, dir=dir, key_pattern=episode_key_pattern)
 
@@ -228,10 +223,10 @@ def s3_find_episode_jpg_keys(episode: Episode) -> pd.DataFrame:
 
 
 def main() -> None:
-    all_episodes = download_all_season_episodes()
+    all_episodes = download_all_seasons_episodes()
     for episode in all_episodes:
         #-----------------------------
-        G = find_google_episode_keys(episode)
+        G = find_google_episode_keys_df(episode)
         expected = set( G[['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class']] )
         result = set(G.columns)
         assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
@@ -369,9 +364,9 @@ def main() -> None:
 # TESTS
 # =============================================
 
-def test_s3_find_episode_jpg_keys():
-    episode = Episode({"episode_id":"S01E01", "spreadsheet_title":"", "spreadsheet_url": "", "share_link":""})
-    C = s3_find_episode_jpg_keys(episode)
+def test_s3_find_episode_jpg_keys_df():
+    episode = Episode({"episode_id":"S01E01", "google_spreadsheet_title":"", "google_spreadsheet_url": "", "google_spreadsheet_share_link":""})
+    C = s3_find_episode_jpg_keys_df(episode)
     expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
     result = set(C.columns)
     assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
@@ -379,5 +374,5 @@ def test_s3_find_episode_jpg_keys():
 
 
 if __name__ == "__main__":
-    test_s3_find_episode_jpg_keys()
+    main()
 

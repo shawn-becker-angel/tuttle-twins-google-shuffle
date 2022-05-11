@@ -40,25 +40,25 @@ Click the "Keys" tab, click "Add Key", select "Create New Key", select Key type 
 Copy the new JSON credentials file from your Downloads folder to a safe location  
 Set credentials_file variable to this location  
 
-## Setup a Google Drive spreadsheet  
-### Open an existing Google Drive spreadsheet  
-Go to url `https://docs.google.com/spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184`  
+## Setup a Google Drive google_spreadsheet  
+### Open an existing Google Drive google_spreadsheet  
+Go to url `https://docs.google.com/google_spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184`  
 Ensure that the first row is column names  
-### Or create a new Google Drive spreadsheet  
-Go to `https://docs.google.com/spreadsheets/u/0/?tgif=d` and click "Blank" to create a new spreadsheet  
+### Or create a new Google Drive google_spreadsheet  
+Go to `https://docs.google.com/google_spreadsheets/u/0/?tgif=d` and click "Blank" to create a new google_spreadsheet  
 Rename the newly created sheet to "pyshark tutorial (`https://pyshark.com/google-sheets-api-using-python`)"  
-Fill out the new spreadsheet - first row is column names  
-## Share the Google Drive spreadsheet with `project_service_account_email`  
+Fill out the new google_spreadsheet - first row is column names  
+## Share the Google Drive google_spreadsheet with `project_service_account_email`  
 Click "Share" button at top right  
 Under "Share with people and groups" add your `project_service_account_email` from above  
 Alert window says "You are sharing to `project_service_account_email` who is not in the Google Workspace organization that this item belongs to."  
 Click "Share anyway" link  
-Click "Copy link" and set share_link variable to this url  
+Click "Copy link" and set google_spreadsheet_share_link variable to this url  
 
 ## Data Preparation:  
 Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "episodes"
-### 1. The NFT team manages a "Google Episode Spreadsheet" for each episode in each season.  
-    a. Each row in an episode spreadsheet has the following columns:
+### 1. The NFT team manages a "Google Episode google_spreadsheet" for each episode in each season.  
+    a. Each row in an episode google_spreadsheet has the following columns:
       * `S3_BASE_URL`: example: 
         `https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/`
       * `ROW_INDEX`: starts with 0
@@ -84,9 +84,9 @@ Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "e
     e. This json file consists of a list of "Episode Objects" (python dict), each with these attributes:  
       * `season_code` a string, episode's season code, example `S01`  
       * `episode_code`: a string, episode's episode number, example `E07`  
-      * `spreadsheet_title`: string title of the epiode's Google sheet  
-      * `spreadsheet_url`: URL, of the google spreadsheet, which can be used for editing by designated users only
-      * `share_link` a manually created URL, that anyone can use to view the google spreadsheet  
+      * `google_spreadsheet_title`: string title of the epiode's Google sheet  
+      * `google_spreadsheet_url`: URL, of the google google_spreadsheet, which can be used for editing by designated users only
+      * `google_spreadsheet_share_link` a manually created URL, that anyone can use to view the google google_spreadsheet  
       * TODO remove local_manifest_jl_file attribute, since each episode has many versioned episode manifest files in S3
 
 ### 3. "Versioned Episode Manifest Files" (a file of json lines):  
@@ -115,7 +115,7 @@ Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "e
     ``` 
 ### 5. `create-manifests.py` (a python module):  
     a. This python module creates an Episode Manifest File for each Episode Object defined in a Season Manifest File 
-    b. each episode spreadsheet is downloaded from Google Docs using google's API functions installed via its `spread` package 
+    b. each episode google_spreadsheet is downloaded from Google Docs using google's API functions installed via its `spread` package 
     c. google sheet processing API functions require a GOOGLE_CREDENTIALS_FILE   
     
 ### 6. `preview-manifest.ipynb` (a jupyter notebook):    
@@ -166,7 +166,7 @@ Each `episode manifest file` is used to calculate the non-class-sensitive source
     
     
 ## Image Frame Reclassification Notes
-Manual classification of all image frames is stored in Google Drive spreadsheets for each episode. New image frames can be added and old frames may be re-classified at any time.  
+Manual classification of all image frames is stored in Google Drive google_spreadsheets for each episode. New image frames can be added and old frames may be re-classified at any time.  
     
 An automated process is needed to detect and handle these changes, that does not require engineering effort.  
     
@@ -197,9 +197,9 @@ Another approach (needs experimentation) is to use `aws s3 cp --recursive` on ca
 There may be many seasons and each season has several episodes
 
 ## Episode Google Sheet:  
-An Episode Google Sheet is a spreadsheet that contains data for thousands of frames in a single TuttleTwins Episode
+An Episode Google Sheet is a google_spreadsheet that contains data for thousands of frames in a single TuttleTwins Episode
 Each row describes the S3 Image URL, Frame Number, Classifications, and Tags for a given frame
-This spreadsheet can be manually altered by the NFT team at any time
+This google_spreadsheet can be manually altered by the NFT team at any time
 
 ## S3 Image Url:  
 Pre-sized versions of each image frame are stored as JPG files in s3:  

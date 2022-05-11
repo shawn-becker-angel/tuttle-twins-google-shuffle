@@ -52,7 +52,7 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
             raise
 
 
-def s3_upload_text_file(up_path, bucket, channel):
+def s3_upload_text_file(up_path: str, bucket: str, channel: str):
     '''
     upload a text file to at up_path to s3
     '''
@@ -62,11 +62,15 @@ def s3_upload_text_file(up_path, bucket, channel):
     s3_resource.Bucket(bucket).put_object(Key=key, Body=data)
 
 
-def s3_download_text_file(bucket, key, dn_path):
+def s3_download_text_file(bucket: str, key: str, dn_path: str):
     '''
     download a text file from s3 into dn_path
     '''
-    s3_resource.Bucket(bucket).download_file(key, dn_path)
+    try:
+        s3_resource.Bucket(bucket).download_file(key, dn_path)
+    except Exception as exp:
+        print(type(exp), str(exp))
+        raise
 
 
 @s3_log_timer_info
@@ -105,7 +109,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
                     num_found += 1
     
     if verbose:
-        print(num_found, ("file" if num_found == 1 else "files"), "found")
+        print(num_found, ("file" if num_found == 1 else "files"), "found", "from s3_list_files")
 
     return s3_key_rows
 
@@ -218,11 +222,11 @@ def test_s3_upload_download():
     bucket = "media.angel-nft.com"
     channel = "tuttle_twins/manifests"
 
-    s3_upload_text_file(test_up_path, bucket, channel)
+    s3_upload_text_file(up_path=test_up_path, bucket=bucket, channel=channel)
 
     up_file = os.path.basename(test_up_path)
     key = f"{channel}/{up_file}"
-    s3_download_text_file(bucket, key, test_dn_path)
+    s3_download_text_file(bucket=bucket, key=key, dn_path=test_dn_path)
 
     # deep comparison
     result = filecmp.cmp(test_up_path, test_dn_path, shallow=False)
