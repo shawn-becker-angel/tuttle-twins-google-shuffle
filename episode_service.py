@@ -9,6 +9,7 @@ import random
 from random import choices
 import datetime
 from episode import Episode
+from s3_key import s3_key, get_s3_key_dict_list
 from s3_utils import s3_log_timer_info, s3_list_files, s3_ls_recursive, s3_delete_files, s3_copy_files
 from season_service import download_all_seasons_episodes
 from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR, GOOGLE_CREDENTIALS_FILE
@@ -198,10 +199,12 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     episode_key_pattern = f"TT_{episode.get_split_episode_id()}_FRM-.+\.jpg"
     s3_uri = f"s3://media.angel-nft.com/tuttle_twins/ML/ | egrep \"{episode_key_pattern}\""
     s3_keys_list = s3_ls_recursive(s3_uri)
-    assert len(s3_keys_list) > 0, f"ERROR: zero s3_keys_list found"
+    if len(s3_keys_list) == 0:
+        logger.info("s3_find_episode_jpg_keys_df() episode_id:{episode_id} zero files found.")
+        return pd.DataFrame()
 
     # convert list of s3_key to list of s3_key.as_dict
-    s3_key_dict_list = s3_keys.get_s3_key_dict_list(s3_keys_list)
+    s3_key_dict_list = get_s3_key_dict_list.__func__(s3_keys_list)
 
     # create dataframe with columns ['last_modified', 'size', 'key']
     df = pd.DataFrame(s3_key_dict_list, columns=['last_modified', 'size', 'key'])
@@ -222,9 +225,13 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
 def main() -> None:
     all_episodes = download_all_seasons_episodes()
     for episode in all_episodes:
+        episode_id = episode.get_episode_id()
+
         #-----------------------------
         G = find_google_episode_keys_df(episode)
-        assert len(G) > 0, f"ERROR: empty google_episode_keys_df"
+        if len(G) == 0:
+            logger.info("find_google_episode_keys_df() episode_id:{episode_id} zero rows found. Skipping this episode")
+            continue
 
         expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
         result = set(G.columns)
@@ -232,23 +239,29 @@ def main() -> None:
 
         # --------------------------
         C = s3_find_episode_jpg_keys_df(episode)
-        assert len(C) > 0, f"ERROR: empty episode_jpg_keys_df"
-
-        expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
-        result = set(C.columns)
-        assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
+        if len(C) > 0:
+            expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
+            result = set(C.columns)
+            assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"            
 
         #-------------------------
         # J1 = C join G on [episode_id, img_frame] to create
-        # J1 with columns [episode_id, img_frame, non-nullable img_class, non-nullable folder, nullable new_img_class, nullable new_folder]         
-        J1 = C.merge(G,  
-            how='inner', 
-            on=['episode_id', 'img_frame'], 
-            sort=False)
+        # J1 with columns [episode_id, img_frame, non-nullable img_class, non-nullable folder, nullable new_img_class, nullable new_folder] 
+        if len(C) > 0:       
+            J1 = C.merge(G,  
+                how='inner', 
+                on=['episode_id', 'img_frame'], 
+                sort=False)
+        # if C is empty then set J1 to G + null folder and img_class
+        else:
+            J1 = G.copy(deep=True)
+            J1['folder'] = None
+            J1['img_class'] = None
+
         expected = set(['episode_id', 'img_frame', 'img_class', 'folder', 'img_src', 'new_img_class', 'new_folder'])
         result = set(J1.columns)
         assert result == expected, f"ERROR: expected J1.columns: {expected} not {result}"
-        
+
         # J1 -> columns=[episode_id, img_frame, key, new_key]
         J1['key'] = J1['folder'] + '/' + J1['img_class']
         J1['new_key'] = J1['new_folder'] + '/' + J1['new_img_class']
@@ -303,10 +316,17 @@ def main() -> None:
         # G2 is G without img_src
         G2 = G[['episode_id', 'img_frame', 'new_img_class', 'new_folder']]
 
-        J2 = G2.merge(C,  
-            how='inner', 
-            on=['episode_id', 'img_frame'], 
-            sort=False)
+        if len(C) > 0:
+            J2 = G2.merge(C,  
+                how='inner', 
+                on=['episode_id', 'img_frame'], 
+                sort=False)
+        # if C is empty then set J2 to G2 + null folder and img_class
+        else:
+            J2 = G2.copy(deep=True)
+            J2['folder'] = None
+            J2['img_class'] = None
+    
         expected = set(['episode_id', 'img_frame', 'new_img_class', 'new_folder','img_class', 'folder'])
         result = set(J2.columns)
         assert result == expected, f"ERROR: expected J2.columns: {expected} not {result}"
@@ -352,6 +372,9 @@ def main() -> None:
         # C4 = fresh s3_find_episode_jpg_keys_df(episode)
         # C4 with columns [last_modified, size, key, folder, img_class, img_frame, season_code, episode_code, episode_id]
         C4 = s3_find_episode_jpg_keys_df(episode)
+        if len(C4) == 0:
+            raise Exception("zero jpg files found for episode_id:{episode_id} should not be possible")
+
         expected = set(['episode_id', 'img_frame', 'folder', 'img_class'])
         result = set(C4.columns)
         assert result == expected, f"ERROR: expected C4.columns: {expected} not {result}"
@@ -378,36 +401,41 @@ def get_test_episode():
     episode_dict = {
         "season_code": "S01",
         "episode_code": "E02",
-        "google_spreadsheet_title":  "Tuttle Twins S01E02 Unsupervised Clustering",
-        "google_spreadsheet_url": "https://docs.google.com/google_spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
-        "google_spreadsheet_share_link": "https://docs.google.com/google_spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing"
+        "google_spreadsheet_title": "Tuttle Twins S01E02 Unsupervised Clustering",
+        "google_spreadsheet_url": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
+        "google_spreadsheet_share_link": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing"
     }
+
     episode = Episode(episode_dict)
     return episode
 
 def test_find_google_episode_keys_df():
     episode = get_test_episode()
-    G = ind_google_episode_keys_df(episode)
-    assert len(G) > 0, f"ERROR: empty google_episode_keys_df."
-
-    expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
-    result = set(G.columns)
-    assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
-
+    episode_id = episode.get_episode_id()
+    G = find_google_episode_keys_df(episode)
+    if len(G) > 0:
+        expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
+        result = set(G.columns)
+        assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
+    else:
+        logger.info(f"Zero google episode keys found for episode_id:{episode_id}")
 
 def test_s3_find_episode_jpg_keys_df():
     episode = get_test_episode()
+    episode_id = episode.get_episode_id()
     C = s3_find_episode_jpg_keys_df(episode)
-    assert len(C) > 0, f"ERROR: empty episode_jpg_keys_df."
-
-    expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
-    result = set(C.columns)
-    assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
-    assert C is not None and len(C) > 0, "expected more than zero keys in C"
+    if len(C) > 0:
+        expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
+        result = set(C.columns)
+        assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
+    else:
+        logger.info(f"Zero episode jpg keys found for episode_id:{episode_id}")
 
 
 if __name__ == "__main__":
     # test_find_google_episode_keys_df()
-    test_s3_find_episode_jpg_keys_df()
-    # main()
+    # test_s3_find_episode_jpg_keys_df()
+    main()
+
+    logger.info("done")
 

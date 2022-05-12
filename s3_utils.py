@@ -207,15 +207,14 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
         returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
         if returned_value != 0:
-            logger.error(f"ERROR: subprocess exit code:{returned_value} - returning empty list")
-            return []
+            logger.warn(f"subprocess exit code:{returned_value} - returning empty list")
         
         with open(tmp_file,"r") as f:
             for line in f:
                 s3_key_row = s3_key(s3_ls_line=line)
                 s3_key_listing.append(s3_key_row)
         
-        logger.info(f"s3_ls_recursive() found:{len(s3_key_listing)}")
+        logger.info(f"s3_ls_recursive() {cmd} found:{len(s3_key_listing)}")
 
         return s3_key_listing
     finally:
