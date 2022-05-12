@@ -45,6 +45,10 @@ def s3_file_exists(bucket: str, key: str):
 
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
     '''Return the response dict'''
+
+    assert len(src_key) > 0, f"ERROR: s3_copy_file() - src_key is undefined"
+    assert len(dst_key) > 0, f"ERROR: s3_copy_file() - dst_key is undefined"
+    
     try:
         response = s3_client.copy_object(
             CopySource={'Bucket': src_bucket, 'Key': src_key}, 
@@ -54,7 +58,7 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
         return response
     except ClientError as ex:
         if ex.response['Error']['Code'] == 'NoSuchKey':
-            logger.info(f"s3_copy_file() - No object found for src_key:{src_key} or dst_key:{dst_key} - returning empty")
+            logger.error(f"s3_copy_file() - NoSuchKey for src_key:{src_key} or dst_key:{dst_key} - returning empty")
             return dict()
         else:
             raise

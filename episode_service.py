@@ -4,6 +4,7 @@ import re
 import gspread
 import os
 import time
+from time import perf_counter
 import json
 import random
 from random import choices
@@ -221,6 +222,8 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     logger.info(f"s3_find_episode_jpg_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
     return df
 
+def log_progress(prefix, episode_id, action, num_files, num_sec, files_per_sec):
+    logger.info(f"{prefix} episode_id:{episode_id} {action} - num_files:{num_files} num_sec:{num_sec} rate:{files_per_sec:.3f} files/sec")
 
 def main() -> None:
     all_episodes = download_all_seasons_episodes()
@@ -232,6 +235,9 @@ def main() -> None:
         if len(G) == 0:
             logger.info("find_google_episode_keys_df() episode_id:{episode_id} zero rows found. Skipping this episode")
             continue
+
+        total_files_needed = len(G)
+        logger.info(f">>> episode_id:{episode_id} total files needed in s3: {total_files_needed}")
 
         expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
         result = set(G.columns)
@@ -277,8 +283,16 @@ def main() -> None:
             # tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg 
             J1_del['del_key'] = "tuttle_twins/ML/" + J1_del['key'] + '/' + J1_del['img_frame'] + ".jpg"
             del_keys = list(J1_del['del_key'].to_numpy())
+
+            del_start = perf_counter()
             s3_delete_files(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, keys=del_keys)
-        
+
+            action = "files deleted from ML"
+            num_files_deleted = len(del_keys)
+            num_sec = perf_counter() - del_start
+            files_per_sec = num_files / elapsed_sec
+            log_progress(">>>", episode_id, action, num_files_deleted, num_sec, files_per_sec)
+
             # discard J1 rows with key in del_keys
             # keep only J1 rows with key not in del_keys
             J1 = J1[~J1['key'].isin(del_keys)]
@@ -294,10 +308,18 @@ def main() -> None:
             J1_cp = J1_cp[['src_key','dst_key']]
             src_keys = list(J1_cp['src_key'].to_numpy())
             dst_keys = list(J1_cp['dst_key'].to_numpy())
+
+            mv_start = perf_counter()
             s3_copy_files(src_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, src_keys=src_keys, 
                         dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
             del_keys = src_keys
             s3_delete_files(bucket=S3_MEDIA_ANGEL_NFT_BUCKET, keys=del_keys)
+
+            action = "files moved from ML to ML"
+            num_files_moved = len(src_keys)
+            num_sec = perf_counter() - mv_start
+            files_per_sec = num_files / elapsed_sec
+            log_progress(">>>", episode_id, action, num_files_moved, num_sec, files_per_sec)
         
             # discard J1 rows with key in del_keys
             # keep only J1 rows with key not in del_keys
@@ -365,8 +387,16 @@ def main() -> None:
         J3_cp = J3[J3['new_key'].ne(None) & J3['key'].eq(None)]
         src_keys = J3_cp[J3_cp['img_src']]
         dst_keys = J3_cp[J3_cp['new_key']]
+
+        cp_start = perf_counter()
         s3_copy_files(src_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, src_keys=src_keys, 
                       dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
+
+        action = "files copied from src to ML"
+        num_files_copied = len(src_keys)
+        num_sec = perf_counter() - cp_start
+        files_per_sec = num_files / elapsed_sec
+        log_progress(">>>", episode_id, action, num_files_copied, num_sec, files_per_sec)
 
         #-----------------------------
         # C4 = fresh s3_find_episode_jpg_keys_df(episode)
@@ -388,9 +418,21 @@ def main() -> None:
         result = set(G2.columns)
         assert result == expected, f"ERROR: expected G2.columns: {expected} not {result}"
 
+        logger.info(f"num files needed in ML: {total_files_needed}")
+        logger.info(f"num files deleted from ML: {num_files_deleted}")
+        logger.info(f"num files moved within ML: {num_files_moved}")
+        logger.info(f"num files copied from src: {num_files_copied}")
+        num_files_unchanged = total_files_needed - num_files_moved - abs(num_files_deleted - num_files_copied)
+        logger.info(f"num files unchanged: {num_files_unchanged}")
+
         #-----------------------------
         # assert C4 == G2
-        # pd.testing.assert_frame_equal(C4,G2)
+        expected = G2.shape
+        result = C4.shape
+        if result != expected:
+            logger.info(f"final shape result: {result} != shape expected: {expected}")
+        else:
+            logger.info(f"final shape result: {result} == shape expected: {expected}")
 
 
 # =============================================
