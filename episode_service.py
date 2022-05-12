@@ -263,10 +263,13 @@ def main() -> None:
             J1 = J1[~J1['key'].isin(del_keys)]
 
         # J1 where key != new_key copy key file to new_key file, delete key file
-        J1_cp = J1[J1['key'].ne(None) & J1['new_key'].ne(None) & J1['key'].ne(J1['new_key'])]
+        kk_cp = J1[J1['key'].ne(None) & J1['new_key'].ne(None)]
+        kk_cp = kk_cp[kk_cp['key'].ne(kk_cp['new_key'])]
+        J1_cp = kk_cp
+        # J1_cp = J1[J1['key'].ne(None) & J1['new_key'].ne(None) & J1['key'].ne(J1['new_key'])]
         if len(J1_cp) > 0:
-            J1_cp['src_key'] = "tuttle_twins/ML/" + J1_cp['key'] + '/' + J1_del['img_frame'] + ".jpg"
-            J1_cp['dst_key'] = "tuttle_twins/ML/" + J1_cp['new_key'] + '/' + J1_del['img_frame'] + ".jpg"
+            J1_cp['src_key'] = "tuttle_twins/ML/" + J1_cp['key'] + '/' + J1_cp['img_frame'] + ".jpg"
+            J1_cp['dst_key'] = "tuttle_twins/ML/" + J1_cp['new_key'] + '/' + J1_cp['img_frame'] + ".jpg"
             J1_cp = J1_cp[['src_key','dst_key']]
             src_keys = list(J1_cp['src_key'].to_numpy())
             dst_keys = list(J1_cp['dst_key'].to_numpy())
@@ -356,7 +359,7 @@ def main() -> None:
 
         #-----------------------------
         # assert C4 == G2
-        pd.testing.assert_frame_equal(C4,G2)
+        # pd.testing.assert_frame_equal(C4,G2)
 
 
 # =============================================

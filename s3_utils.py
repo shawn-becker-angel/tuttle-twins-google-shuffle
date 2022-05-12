@@ -62,14 +62,14 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
 
 @s3_log_timer_info
 def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
-    logger.info(f"MOCK s3_copy_files() {len(src_keys)} src files to {len(dst_keys)} destinations")
-    # try:
-    #     zipped_keys = zip(src_keys, dst_keys)
-    #     for src_key, dst_key in zipped_keys:
-    #         s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
-    # except Exception as exp:
-    #     logger.error(type(exp),str(exp))
-    #     raise
+    logger.info(f"s3_copy_files() {len(src_keys)} src files to {len(dst_keys)} destinations")
+    try:
+        zipped_keys = zip(src_keys, dst_keys)
+        for src_key, dst_key in zipped_keys:
+            s3_copy_file(src_bucket=src_bucket, src_key=src_key, dst_bucket=dst_bucket, dst_key=dst_key)
+    except Exception as exp:
+        logger.error(type(exp),str(exp))
+        raise
 
 
 def s3_delete_file(bucket: str, key: str) -> None:
@@ -82,9 +82,9 @@ def s3_delete_file(bucket: str, key: str) -> None:
 
 @s3_log_timer_info
 def s3_delete_files(bucket: str, keys: List[str]) -> None:
-    logger.info(f"MOCK s3_delete_files() {len(keys)} files")
-    # for key in keys:
-    #     s3_resource.Object(bucket, key).delete()
+    logger.info(f"s3_delete_files() {len(keys)} files")
+    for key in keys:
+        s3_resource.Object(bucket, key).delete()
 
 
 def s3_upload_text_file(up_path: str, bucket: str, channel: str):
