@@ -46,8 +46,7 @@ class s3_key:
         return { "last_modified" : self.last_modified, "size": self.size, "key": self.key }
 
 @staticmethod
-def get_s3_key_dict_list(s3_keys_list: list[s3_key]) -> list[dict]:
-    '''Return a list of s3_key.as_dict()'''
+def get_s3_key_dict_list(s3_keys_list):
     return [key.as_dict() for key in  s3_keys_list]
 
 ############################
@@ -68,15 +67,21 @@ def test_multi_lines():
     result = len(keys)
     assert result == expected, f"ERROR: expected num key: {expected} not {result}"
 
+    cnt = 0
     prefix = "tuttle_twins/ML/test/Common/TT_S01_E01_FRM"
     for key in keys:
         assert prefix in key.get_key(), "ERROR: prefix not found in key.get_key()"
+        cnt += 1
+    logger.info(f"key.get_key() tested {cnt} keys")
 
     # how to access a staticmethod within class
     # see https://stackoverflow.com/a/12718272/18218031
     dicts = get_s3_key_dict_list.__func__(keys)
+    cnt = 0
     for d in dicts:
         assert prefix in d['key'], "ERROR: prefix not found in d['key']"
+        cnt += 1
+    logger.info(f"get_s3_key_dict_list() tested {cnt} keys")
 
 if __name__ == '__main__':
     test_multi_lines()
