@@ -1,5 +1,5 @@
 import typing
-from typing import Any, List, TypedDict
+from typing import Any, List
 import re
 import os
 import boto3

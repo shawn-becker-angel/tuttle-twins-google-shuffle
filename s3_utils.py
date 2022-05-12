@@ -198,26 +198,30 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
         {"last_modified":"2022-05-03T19:15:44", "size":2336, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
     return the list of all s3_key as s3_key_listing
     '''
-    s3_key_listing = []
-    utc_datetime_iso = datetime.datetime.utcnow().isoformat()
-    tmp_file = "/tmp/tmp-" + utc_datetime_iso
-    cmd = "aws s3 ls --recursive " + s3_uri + " > " + tmp_file
-    logger.info(f"s3_ls_recursive() cmd:{cmd}")
-    returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
+    try:
+        s3_key_listing = []
+        utc_datetime_iso = datetime.datetime.utcnow().isoformat()
+        tmp_file = "/tmp/tmp-" + utc_datetime_iso
+        cmd = "aws s3 ls --recursive " + s3_uri + " > " + tmp_file
+        logger.info(f"s3_ls_recursive() cmd:{cmd}")
+        returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
-    if returned_value != 0:
-        logger.error(f"subprocess exit code:{returned_value} - returning empty list")
-        return []
-    
-    with open(tmp_file,"r") as f:
-        for line in f:
-            s3_key_row = s3_key(s3_ls_line=line)
-            s3_key_listing.append(s3_key_row.as_dict())
-    
-    os.remove(tmp_file)
-    logger.info(f"s3_ls_recursive() found:{len(s3_key_listing)}")
+        if returned_value != 0:
+            logger.error(f"ERROR: subprocess exit code:{returned_value} - returning empty list")
+            return []
+        
+        with open(tmp_file,"r") as f:
+            for line in f:
+                s3_key_row = s3_key(s3_ls_line=line)
+                s3_key_listing.append(s3_key_row)
+        
+        logger.info(f"s3_ls_recursive() found:{len(s3_key_listing)}")
 
-    return s3_key_listing
+        return s3_key_listing
+    finally:
+        if os.path.exists(tmp_file):
+            os.remove(tmp_file)
+
     
 
 ###################################################
@@ -249,29 +253,32 @@ def test_s3_copy_file():
 
 
 def test_s3_upload_download():
-    tmp_dir = "/tmp"
-    test_up_path = os.path.join(tmp_dir, "test_up.txt")
-    test_dn_path = os.path.join(tmp_dir, "test_dn.txt")
+    try:
+        tmp_dir = "/tmp"
+        test_up_path = os.path.join(tmp_dir, "test_up.txt")
+        test_dn_path = os.path.join(tmp_dir, "test_dn.txt")
 
-    with open(test_up_path, "w") as f:
-        f.write("HOWDY\n")
+        with open(test_up_path, "w") as f:
+            f.write("HOWDY\n")
 
-    bucket = "media.angel-nft.com"
-    channel = "tuttle_twins/manifests"
+        bucket = "media.angel-nft.com"
+        channel = "tuttle_twins/manifests"
 
-    s3_upload_text_file(up_path=test_up_path, bucket=bucket, channel=channel)
+        s3_upload_text_file(up_path=test_up_path, bucket=bucket, channel=channel)
 
-    up_file = os.path.basename(test_up_path)
-    key = f"{channel}/{up_file}"
-    s3_download_text_file(bucket=bucket, key=key, dn_path=test_dn_path)
+        up_file = os.path.basename(test_up_path)
+        key = f"{channel}/{up_file}"
+        s3_download_text_file(bucket=bucket, key=key, dn_path=test_dn_path)
 
-    # deep comparison
-    result = filecmp.cmp(test_up_path, test_dn_path, shallow=False)
-    assert result == True, "ERROR: files are not the same"
+        # deep comparison
+        result = filecmp.cmp(test_up_path, test_dn_path, shallow=False)
+        assert result == True, "ERROR: up/dn files are not the same"
 
-    # cleanup
-    os.remove(test_up_path)
-    os.remove(test_dn_path)
+    finally:
+        if os.path.exists(test_up_path):
+            os.remove(test_up_path)
+        if os.path.exists(test_dn_path):
+            os.remove(test_dn_path)
 
 
 def test_s3_list_files():
@@ -289,15 +296,15 @@ def test_s3_list_files():
     s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
     assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
 
-
 def test_s3_ls_recursive():
     prefix = "tuttle_twins/ML/test/Common"
     episode_key_pattern = f"TT_S01_E01_FRM-.+\.jpg"
     s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep \"{episode_key_pattern}\""
-    s3_keys = s3_ls_recursive(s3_uri)
-    assert len(s3_keys) > 0
-    for s3_key in s3_keys:
-        assert prefix in s3_key.get_key()
+    keys = s3_ls_recursive(s3_uri)
+    assert len(keys) > 0, "ERROR: s3_ls_recursive return zero keys"
+
+    for key in keys:
+        assert prefix in key.get_key(), "ERROR: prefix not found in key.get_key()"
 
 if __name__ == "__main__":
 
@@ -306,7 +313,8 @@ if __name__ == "__main__":
         test_s3_copy_file()
         test_s3_upload_download()
         test_s3_list_files()
-        # test_s3_ls_recursive()
+        test_s3_ls_recursive()
+        logger.info("done")
     
     # run s3_list_file_cli if any command line args are given
     else:

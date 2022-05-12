@@ -1,5 +1,9 @@
-from typing import Tuple
 import re
+
+import logging
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger("episode")
+
 
 # This class contains the contents of each "episode" dict in the season manifest json file, 
 # e.g. s3://media.angel-nft.com/tuttle_twins/manifests/S01-season.json
@@ -76,8 +80,9 @@ def test_constructor():
     }
     episode = Episode(episode_dict)
     assert episode.get_episode_id() == episode_dict['season_code'] + episode_dict['episode_code']
-    print("new episode:", json.dumps(episode.as_dict(),indent=4))
+    logger.info("new episode:" + json.dumps(episode.as_dict(),indent=4))
 
     
 if __name__ == '__main__':
     test_constructor()
+    logger.info("done")

@@ -13,6 +13,9 @@ from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger("season")
 
 # ============================================
 # season_service MODULE OVERVIEW
@@ -54,7 +57,7 @@ def download_season_episodes(season_key: str) -> List[Episode]:
                     episodes.append(episode)
                 
     except Exception as exp:
-        print(type(exp), str(exp))
+        logger.error(type(exp), str(exp))
         raise
 
     finally:
@@ -76,7 +79,7 @@ def download_all_seasons_episodes() -> List[Episode]:
             if season_episodes and len(season_episodes) > 0:
                 all_episodes.extend(season_episodes)
     except Exception as exp:
-        print(type(exp),str(exp))
+        logger.error(type(exp),str(exp))
         raise
     return all_episodes
 
@@ -96,5 +99,6 @@ def test_download_all_seasons_episodes():
 if __name__ == "__main__":
     test_find_all_season_s3_keys()
     test_download_all_seasons_episodes()
+    logger.info("done")
     
 

@@ -1,5 +1,9 @@
-from typing import TypedDict
 import datetime
+
+import logging
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger("s3_key")
+
 
 # describes each row of an 'aws s3 ls' search results as a dict with typed attributes
 class s3_key:
@@ -12,8 +16,7 @@ class s3_key:
         Take one line of the result of 'aws s3 ls --recursive <path>', e.g.
         "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg\n"
         remove the trailing "\n
-        and parse it into a s3_key dict, e.g.
-        {"last_modified": 2022-05-03T19:15:44 , "size":2336, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
+        and parse it into instance attributes.
         '''
         try:
             # replace multi-spaces with one
@@ -39,11 +42,14 @@ class s3_key:
         return self.key
         
     def as_dict(self):
-        '''
-        Return an explicit s3_key dict
-        '''
+        '''Return a new s3_key dict'''
         return { "last_modified" : self.last_modified, "size": self.size, "key": self.key }
-    
+
+@staticmethod
+def get_s3_key_dict_list(s3_keys_list: list[s3_key]) -> list[dict]:
+    '''Return a list of s3_key.as_dict()'''
+    return [key.as_dict() for key in  s3_keys_list]
+
 ############################
 # TESTS
 ############################
@@ -62,6 +68,18 @@ def test_multi_lines():
     result = len(keys)
     assert result == expected, f"ERROR: expected num key: {expected} not {result}"
 
+    prefix = "tuttle_twins/ML/test/Common/TT_S01_E01_FRM"
+    for key in keys:
+        assert prefix in key.get_key(), "ERROR: prefix not found in key.get_key()"
+
+    # how to access a staticmethod within class
+    # see https://stackoverflow.com/a/12718272/18218031
+    dicts = get_s3_key_dict_list.__func__(keys)
+    for d in dicts:
+        assert prefix in d['key'], "ERROR: prefix not found in d['key']"
+
 if __name__ == '__main__':
     test_multi_lines()
+    logger.info("done")
+
     

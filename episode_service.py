@@ -104,6 +104,7 @@ def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     gsheet = gc.open_by_url(episode.get_google_spreadsheet_share_link())
     data = gsheet.sheet1.get_all_records()
     df = pd.DataFrame(data)
+    assert len(df) > 0, f"ERROR: google sheet df is empty"
 
     # fetch the public 's3_thumbnails_base_url' from the name of column zero, e.g.
     #   https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/
@@ -197,10 +198,13 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     episode_key_pattern = f"TT_{episode.get_split_episode_id()}_FRM-.+\.jpg"
     s3_uri = f"s3://media.angel-nft.com/tuttle_twins/ML/ | egrep \"{episode_key_pattern}\""
     s3_keys_list = s3_ls_recursive(s3_uri)
-    # episode_keys_list = s3_list_files(bucket=bucket, dir=dir, key_pattern=episode_key_pattern)
+    assert len(s3_keys_list) > 0, f"ERROR: zero s3_keys_list found"
+
+    # convert list of s3_key to list of s3_key.as_dict
+    s3_key_dict_list = s3_keys.get_s3_key_dict_list(s3_keys_list)
 
     # create dataframe with columns ['last_modified', 'size', 'key']
-    df = pd.DataFrame(s3_keys_list, columns=['last_modified', 'size', 'key'])
+    df = pd.DataFrame(s3_key_dict_list, columns=['last_modified', 'size', 'key'])
     
     # split df.key to add columns ['folder', 'img_class', 'img_frame', 'season_code', 'episode_code', 'episode_id']
     df = split_key_in_df(df)
@@ -220,12 +224,16 @@ def main() -> None:
     for episode in all_episodes:
         #-----------------------------
         G = find_google_episode_keys_df(episode)
+        assert len(G) > 0, f"ERROR: empty google_episode_keys_df"
+
         expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
         result = set(G.columns)
         assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
 
         # --------------------------
         C = s3_find_episode_jpg_keys_df(episode)
+        assert len(C) > 0, f"ERROR: empty episode_jpg_keys_df"
+
         expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
         result = set(C.columns)
         assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
@@ -366,9 +374,32 @@ def main() -> None:
 # TESTS
 # =============================================
 
+def get_test_episode():
+    episode_dict = {
+        "season_code": "S01",
+        "episode_code": "E02",
+        "google_spreadsheet_title":  "Tuttle Twins S01E02 Unsupervised Clustering",
+        "google_spreadsheet_url": "https://docs.google.com/google_spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
+        "google_spreadsheet_share_link": "https://docs.google.com/google_spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing"
+    }
+    episode = Episode(episode_dict)
+    return episode
+
+def test_find_google_episode_keys_df():
+    episode = get_test_episode()
+    G = ind_google_episode_keys_df(episode)
+    assert len(G) > 0, f"ERROR: empty google_episode_keys_df."
+
+    expected = set(['episode_id', 'img_src', 'img_frame', 'new_folder', 'new_img_class'])
+    result = set(G.columns)
+    assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
+
+
 def test_s3_find_episode_jpg_keys_df():
-    episode = Episode({"episode_id":"S01E01", "google_spreadsheet_title":"", "google_spreadsheet_url": "", "google_spreadsheet_share_link":""})
-    C = s3_find_episode_jpg_keys_df(episode, max_keys=1000)
+    episode = get_test_episode()
+    C = s3_find_episode_jpg_keys_df(episode)
+    assert len(C) > 0, f"ERROR: empty episode_jpg_keys_df."
+
     expected = set(C[['episode_id', 'img_frame', 'folder', 'img_class']])
     result = set(C.columns)
     assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
@@ -376,5 +407,7 @@ def test_s3_find_episode_jpg_keys_df():
 
 
 if __name__ == "__main__":
-    main()
+    # test_find_google_episode_keys_df()
+    test_s3_find_episode_jpg_keys_df()
+    # main()
 
