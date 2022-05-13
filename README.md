@@ -96,7 +96,7 @@ Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "e
     c. A newly generated Episode Manifest file is only uploaded to S3 if it differs from the previous latest version in S3
     d. Example:
       ```
-      (venv) ~/workspace/tuttle-twins-rarity$ aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"  
+      (venv) ~/workspace/tuttle-twins-rarity$ aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep -e "S\d\dE\d\d-.*\.jl"  
       2022-05-02 14:54:19    4744253 S01E01-manifest-2022-05-02T12:43:24.662714.jl  
       2022-05-02 14:54:19    4744253 S01E01-manifest-2022-05-02T13:09:44.722111.jl  
       ```

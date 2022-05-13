@@ -46,8 +46,8 @@ def s3_file_exists(bucket: str, key: str):
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
     '''Return the response dict'''
 
-    assert len(src_key) > 0, f"ERROR: s3_copy_file() - src_key is undefined"
-    assert len(dst_key) > 0, f"ERROR: s3_copy_file() - dst_key is undefined"
+    assert src_key is not None, f"ERROR: s3_copy_file() - src_key is undefined"
+    assert dst_key is not None, f"ERROR: s3_copy_file() - dst_key is undefined"
     
     try:
         response = s3_client.copy_object(
@@ -119,7 +119,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
     '''
     prefix_str = "" if prefix is None else prefix + "*"
     suffix_str = "" if suffix is None else "*" + suffix
-    key_pattern_str = "" if key_pattern is None else f" | egrep \"{key_pattern}\""
+    key_pattern_str = "" if key_pattern is None else f" | egrep -e \"{key_pattern}\""
 
     s3_key_rows = []
     if verbose:
@@ -300,9 +300,9 @@ def test_s3_list_files():
     assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
 
 def test_s3_ls_recursive():
-    prefix = "tuttle_twins/ML/test/Common"
-    episode_key_pattern = f"TT_S01_E01_FRM-.+\.jpg"
-    s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep \"{episode_key_pattern}\""
+    prefix = "tuttle_twins/ML"
+    episode_key_pattern = f"train/Uncommon/TT_S01_E01_FRM-.+\.jpg"
+    s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep -e \"{episode_key_pattern}\""
     keys = s3_ls_recursive(s3_uri)
     assert len(keys) > 0, "ERROR: s3_ls_recursive return zero keys"
 
