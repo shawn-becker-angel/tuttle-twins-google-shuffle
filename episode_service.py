@@ -337,8 +337,24 @@ def main() -> None:
         #   conversely, J1_mv is zero if C is zero
         J1_mv = J1[~J1['ml_key'].isnull() & ~J1['new_ml_key'].isnull()]
         if len(J1_mv) > 0:
+            
+            '''
+            episode_service.py:340: SettingWithCopyWarning: 
+            A value is trying to be set on a copy of a slice from a DataFrame.
+            Try using .loc[row_indexer,col_indexer] = value instead
+
+            See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
             J1_mv['src_key'] = "tuttle_twins/ML/" + J1_mv['ml_key'] + '/' + J1_mv['img_frame'] + ".jpg"
-            J1_mv['dst_key'] = "tuttle_twins/ML/" + J1_mv['new_ml_key'] + '/' + J1_mv['img_frame'] + ".jpg"
+            '''
+            
+            # J1_mv['src_key'] = 
+            J1_mv.loc[:,'src_key'] = \
+                "tuttle_twins/ML/" + J1_mv['ml_key'] + '/' + J1_mv['img_frame'] + ".jpg"
+
+            # J1_mv['dst_key'] = 
+            J1_mv.loc[:,'dst_key'] = \
+                "tuttle_twins/ML/" + J1_mv['new_ml_key'] + '/' + J1_mv['img_frame'] + ".jpg"
+            
             J1_mv = J1_mv[['src_key','dst_key']]
             src_keys = list(J1_mv['src_key'].to_numpy())
             dst_keys = list(J1_mv['dst_key'].to_numpy())
