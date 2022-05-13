@@ -104,17 +104,22 @@ def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     df = pd.DataFrame(data)
     assert len(df) > 0, f"ERROR: google sheet df is empty"
     
-    # subsample by 1/1000
-    df = df.sample(round(len(df) * (1.0 / 1_000.0)))
+    # subsample by 1/200
+    df = df.sample(round(len(df) * (1.0 / 200.0)))
 
-    # fetch the public 's3_thumbnails_base_url' from the name of column zero, e.g.
-    #   https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/
+    # fetch the public 's3_thumbnails_base_url' from the name of column zero
+    # e.g. https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/
     s3_thumbnails_base_url = df.columns[0]
+    
+    # parse out 's3_img_src_base' from 's3_thumbnails_base_url'
+    # e.g. "tuttle_twins/default_eng/v1/frames/thumbnails/"
+    tt_idx = s3_thumbnails_base_url.find("tuttle_twins")
+    s3_img_src_base = s3_thumbnails_base_url[tt_idx:]
 
-    # verify that s3_thumbnails_base_url contains episode_id.lower() e.g. s01e01
+    # verify that s3_img_src_base_url contains episode_id.lower() e.g. s01e01
     episode_id_lower = episode_id.lower()
-    if s3_thumbnails_base_url.find(episode_id_lower) == -1:
-        raise Exception(f"s3_thumbnails_base_url fails to include {episode_id_lower}")
+    if s3_img_src_base.find(episode_id_lower) == -1:
+        raise Exception(f"s3_img_src_base fails to include {episode_id_lower}")
 
     # verify that all rows of the "FRAME NUMBER" column contain the 'episode_frame_code', e.g. 
     #   "TT_S01_E01_FRM"  
@@ -133,7 +138,7 @@ def find_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     df['img_frame'] = df["FRAME NUMBER"]
 
     # compute the "img_url" column of each row using the s3_thumbnails_base_url and the 'img_frame' of that row
-    df['img_src'] = s3_thumbnails_base_url + df['img_frame'] + ".jpg"
+    df['img_src'] = s3_img_src_base + df['img_frame'] + ".jpg"
 
     # compute the "new_ml_img_class" column as the first available "CLASSIFICATION" for that row or None
     df['new_ml_img_class'] = \
@@ -213,7 +218,7 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     s3_uri = f"s3://media.angel-nft.com/tuttle_twins/ML/ | egrep -e \"{episode_key_pattern}\""
     s3_keys_list = s3_ls_recursive(s3_uri)
     if len(s3_keys_list) == 0:
-        logger.info("s3_find_episode_jpg_keys_df() episode_id:{episode_id} zero files found.")
+        logger.info(f"episode_id:{episode_id} zero episode_jpg_keys found.")
         return pd.DataFrame()
 
     # convert list of s3_key to list of s3_key.as_dict
@@ -394,8 +399,8 @@ def main() -> None:
         # J3 with columns = [episode_id, img_frame, new_ml_key, ml_key, img_src]
         if len(J2) > 0:
             J3 = J2.merge(G3,  
-                how='inner', 
-                on=['episode_id', 'img_frame'], 
+                how='left', 
+                on=['episode_id', 'img_frame', 'new_ml_key'], 
                 suffixes=('',''),
                 sort=False)
         # if J2 is empty then J3 is G + null ml_key
@@ -411,12 +416,14 @@ def main() -> None:
         J3_cp = J3[~J3['new_ml_key'].isnull() & J3['ml_key'].isnull()]
         
         if len(J3_cp) > 0:
-            src_keys = J3_cp[J3_cp['img_src']]
-            dst_keys = J3_cp[J3_cp['new_ml_key']]
-
+            # e.g. J3_cp['dst_file'] = "tuttle_twins/ML/" + "training/Common" + "/" + "TT_S01_E01_FRM-00-18-21-08" + ".jpg"
+            J3_cp['dst_file'] = "tuttle_twins/ML/" + J3_cp['new_ml_key'] + '/' + J3_cp['img_frame'] + ".jpg"
+            src_keys = J3_cp['img_src']
+            dst_keys = J3_cp['dst_file']
+            
             cp_start = perf_counter()
             s3_copy_files(src_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, src_keys=src_keys, 
-                        dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
+                          dst_bucket=S3_MEDIA_ANGEL_NFT_BUCKET, dst_keys=dst_keys)
 
             action = "files copied from src to ML"
             num_files_copied = len(src_keys)
@@ -431,34 +438,35 @@ def main() -> None:
         if len(C4) == 0:
             raise Exception("zero jpg files found for episode_id:{episode_id} should not be possible")
 
-        expected = set(['episode_id', 'img_frame', 'ml_folder', 'ml_image_class'])
+        expected = set(['episode_id', 'img_frame', 'ml_key'])
         result = set(C4.columns)
         assert result == expected, f"ERROR: expected C4.columns: {expected} not {result}"
         
         #-----------------------------
-        # G still has columns [episode_id, img_frame, new_ml_folder, new_ml_img_class]
-        # G2 -> G with columns [episode_id, img_frame, ml_folder, ml_image_class]
-        G2 = G[['episode_id', 'img_frame', 'new_ml_folder', 'new_ml_img_class']]
-        G2 = G2.rename(columns={'new_ml_folder':'ml_folder', 'new_ml_img_class':'ml_image_class'})
-        expected = set(['episode_id', 'img_frame', 'ml_folder', 'ml_image_class'])
+        # G still has columns [episode_id, img_frame, img_src, new_ml_key]
+        # G2 is the cropped and renamed version of G, so it can be compared with C4
+        # G2 -> G with columns [episode_id, img_frame, ml_key]
+        G2 = G[['episode_id', 'img_frame', 'new_ml_key']]
+        G2 = G2.rename(columns={'new_ml_key' :'ml_key'})
+        expected = set(['episode_id', 'img_frame', 'ml_key'])
         result = set(G2.columns)
         assert result == expected, f"ERROR: expected G2.columns: {expected} not {result}"
 
-        logger.info(f"num files needed in ML: {total_files_needed}")
-        logger.info(f"num files deleted from ML: {num_files_deleted}")
-        logger.info(f"num files moved within ML: {num_files_moved}")
-        logger.info(f"num files copied from src: {num_files_copied}")
-        num_files_unchanged = total_files_needed - num_files_moved - abs(num_files_deleted - num_files_copied)
-        logger.info(f"num files unchanged: {num_files_unchanged}")
+        logger.info(f"episode_id: {episode_id} num files needed in ML: {total_files_needed}")
+        logger.info(f"episode_id: {episode_id} num files deleted from ML: {num_files_deleted}")
+        logger.info(f"episode_id: {episode_id} um files moved within ML: {num_files_moved}")
+        logger.info(f"episode_id: {episode_id} num files copied from src: {num_files_copied}")
+        num_files_unchanged = total_files_needed - num_files_moved - max(num_files_deleted, num_files_copied)
+        logger.info(f"episode_id: {episode_id} num files unchanged: {num_files_unchanged}")
 
         #-----------------------------
         # assert C4 == G2
         expected = G2.shape
         result = C4.shape
         if result != expected:
-            logger.info(f"final shape result: {result} != shape expected: {expected}")
+            logger.info(f"episode_id: {episode_id} final shape result: {result} != shape expected: {expected}")
         else:
-            logger.info(f"final shape result: {result} == shape expected: {expected}")
+            logger.info(f"episode_id: {episode_id} final shape result: {result} == shape expected: {expected}")
 
 
 # =============================================

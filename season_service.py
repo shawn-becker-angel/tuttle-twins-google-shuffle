@@ -15,7 +15,7 @@ load_dotenv()
 
 import logging
 logging.basicConfig(level = logging.INFO)
-logger = logging.getLogger("season")
+logger = logging.getLogger("season_service")
 
 # ============================================
 # season_service MODULE OVERVIEW
