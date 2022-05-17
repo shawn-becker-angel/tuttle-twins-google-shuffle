@@ -1,238 +1,118 @@
-# The Tuttle Twins Rarity Estimation Project   
-## Motivation:  
-The Angel Studios website (https://www.angel.com) and apps are introducing new functionality that allows users to purchase a "Non-Fungible Token" (NFT) for any image frame from the animated "Tuttle Twins" production. A starting sell price for each NFT will be  determined according to some measure of its quality. The initial measure of a frame's quality is being based on its level of "rarity". Categories of rarity range from the highest level of "Legendary" down to lower levels of "Rare", "Uncommon", "Common", and "Trash".  
+# The Tuttle Twins Rarity Estimation Project - Data Preparation    
+## Background:  
+The Angel Studios apps and website (https://www.angel.com) are introducing new functionality that allows users to purchase a "Non-Fungible Token" (NFT) for selected image frames from the productions that they host.  
 
-This project uses "image-classification" algorithms with "convolutional neural networks" (CNNs) to automatically estimate the level of rarity for a given image frame. This requires first creating a large set (thousands or millions) of frames that have been manually assigned a "rarity" level. Image frames are extracted from each episode's digital MP4 video file. Multiple rarity assignments are collected from both automated and manual sources. Ultimately, only the most trusted assignment is used for each image frame.
+This project aims to use machine learning technologies to create a predictive model that will be used to automatically set the starting NFT sell price for a given frame of the 'Tuttle Twins' production. 
 
-A large sub-set of these pre-classified image frames (e.g. 80%) is used to "train" a prediction model.  
+Initial prices will be determined according to some measure of its "rarity". Rarity levels range from the highest level of "Legendary" down to lower levels of "Rare", "Uncommon", "Common", and "Trash".  
 
-Once the prediction model is trained, the remaining set of classified image frames (e.g. 20%) that have not been included in the training set, is used to "validate" the prediction model. The percentage of miss-classified validation image frames are used as a measure of prediction accuracy. The percentage of errors is used to incrementally improve the accuracy of the model. This process continues until the percentage of classification errors falls below some designated threshold. This iterative process may also stop if the rate of prediction accuracy stops improving.  
+## Data Preparation  
+This project uses "image-classification" algorithms with "convolutional neural networks" (CNNs) to train a model that can be used to estimate the level of rarity for a given image frame. This requires first creating a large set (thousands or millions) of frames that have been manually assigned a "rarity" level. Multiple rarity assignments are collected from both automated and manual sources. Ultimately, only the most trusted assignment is used as the supervised rarity classification for each image frame in the training set.
 
-At some point, the model will be used to classify a totally new set of image frames. The results will be manually reviewed and those classification errors will be used to further improve the accuracy of the model.
+The CCN training process requires working with a random sampled sub-set of these pre-classified source image files.  
 
-## Related work:
-Once we have gained practical experience training and improving the prediction model using CNNs, we may choose to apply similar processes to do any of the following:  
-* automatically detect scene changes and group frames into scenes  
-* automatically detect known shapes (e.g. cars, faces, or rocket ships) in each frame  
-* use facial recognition algorithms to detect actors that are present in each scene  
+There are a lot of image files to manage for each episode. At a framerate of 24 frames per second x 60 seconds per minute x about 20 minutes per episode, this results in about 28,800 frames per episode. The huge effort of managing supervised classifications for all of these images is managed using spreadsheets stored in Google Drive.
 
-## Implementation:  
-Implemenation of the Tuttle Twins Rarity Estimation project is divided into 5 different stages of work:  
-* Data Preparation  
-* Model Training  
-* Model Validation  
-* Error Evaluation  
-* Iterative Tuning  
+These spreadsheets, which are organized by season and episode, are dynamic and will change without notice at any time. Images classifications and image files will change and new seasons and episodes may be added without explicit notification.  
 
-Each stage is implemented using pre-built Tensorflow packages, custom python modules, and data structures running on high-powered servers at Amazon Web Serices or Google Cloud.
+### JPG image files:  
+Pre-sized jpg source image files are stored in S3 under bucket `media.angel-nft.com` with directory structure `tuttle_twins/<season_code><episode_code>/default_eng/v1/frames/<img_size>`
 
-## Google Drive Setup  
+Data preparation for training the CNN requires that the three target datasets contain only their required jpg files. Image files for these destination datasets are stored in S3 bucket `media.angel-nft.com` but with directory structure `tuttle_twins/ML/<dataset>/<classification>`.
 
-### Create a new Google Cloud project  
-Go to `https://console.developers.google.com/`  
-Click "create a new project" link named "gsheets-pyshark"  
-Click on top right bell icon to see a notification that the project has been created  
-Click "View" to view the detail page of the newly created project  
-Save your `project_service_account email`   
+## Random image assignment improves model quality:  
+The Tuttle Twins image classification CNN model is trained to work over multiple seasons and episodes. Random placement of images among the datasets improves the quality of the predictive model. So the source jpg files used to train, validate and test all episodes need to be placed within one of the three destination datasets.  
 
-### Create Keys for your new Google Cloud Project  
-Click the "Keys" tab, click "Add Key", select "Create New Key", select Key type "JSON", click "CREATE" link  
-Copy the new JSON credentials file from your Downloads folder to a safe location  
-Set credentials_file variable to this location  
+## Sync rather than full-load strategy:  
+Rather than deleting all datasets and then copying over all source jpg files from scratch every time any of the google spreadsheets change, we take pains to calculate the minimal S3 file copies and deletes needed. These costly S3 operations are used to bring the destination dataset files into sync with the target configuration defined among the google episode spreadsheets.
 
-## Setup a Google Drive google_spreadsheet  
-### Open an existing Google Drive google_spreadsheet  
-Go to url `https://docs.google.com/google_spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184`  
-Ensure that the first row is column names  
-### Or create a new Google Drive google_spreadsheet  
-Go to `https://docs.google.com/google_spreadsheets/u/0/?tgif=d` and click "Blank" to create a new google_spreadsheet  
-Rename the newly created sheet to "pyshark tutorial (`https://pyshark.com/google-sheets-api-using-python`)"  
-Fill out the new google_spreadsheet - first row is column names  
-## Share the Google Drive google_spreadsheet with `project_service_account_email`  
-Click "Share" button at top right  
-Under "Share with people and groups" add your `project_service_account_email` from above  
+## One Google spreadsheet for each episode in a season:  
+Each episode spreadsheet has the following columns:  
+  * `S3_BASE_URI`: example:  
+    `media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/`
+  * `ROW_INDEX`: starts with 0  
+  * `FRAME NUMBER`: example: `TT_S01_E01_FRM-00-00-08-12`  
+  * `UNSUPERVISED CLASSIFICATION`: see `RARITY_CHOICES`  
+  * `SUPERVISED CLASSIFICATION`: see `RARITY_CHOICES`  
+  * `JONNY's RECLASSIFICATION`: see `RARITY_CHOICES`  
+  * `METADATA`: example `[Emily, Space Tunnel, Time Machine]`   
+
+### Authorize API access to the Google spreadsheets:    
+In order to automatically process the Google spreadsheets, the application needs to obtain the credentials needed to access the Google Drive API. To do this, first go to `https://console.developers.google.com/`.  
+Click "create a new project" link named "gsheets-pyshark".  
+Click on top right bell icon to see a notification that the project has been created.  
+Click "View" to view the detail page of the newly created project.    
+Click to save your `project_service_account email`.   
+
+### Create an API access key for the new Google Cloud Project  
+Click the "Keys" tab, click "Add Key", select "Create New Key", select Key type "JSON", click "CREATE" link.  
+Copy the new JSON credentials file from your Downloads folder to a safe location.  
+Copy the google credientials file to the base directory of your local copy of this repo.  
+Update the `GOOGLE_DRIVE_CREDENTIALS_FILE` property in the project's `.env` file accordingly.  
+Make sure that the `.gitignore` file is configured to NOT upload this file to github.  
+Note: if your credentials file does get pushed up to the github repo, you will receive a warning email from Google advising you that storing their credentials in github is against your signed Google Developer Agreement.  
+
+### Open an existing spreadsheet and create its "Share Link"
+Open an episode spreadsheet, like season-01, episode-01, at url `https://docs.google.com/google_spreadsheets/d/1cr_rXVh0eZZ4aLtFKb5dw8jfBtksRezhY1X5ys6FckI/edit#gid=1690818184`  
+Ensure that the first row contains the standard column names.  
+Click "Share" button at top right.  
+Under "Share with people and groups" add your `project_service_account_email` that you used above.  
 Alert window says "You are sharing to `project_service_account_email` who is not in the Google Workspace organization that this item belongs to."  
-Click "Share anyway" link  
-Click "Copy link" and set google_spreadsheet_share_link variable to this url  
+Click the "Share anyway" link.  
+Click "Copy link" and save the "GOOGLE_SPREADSHEET_SHARE_LINK" variable for the next step.   
 
-## Data Preparation:  
-Tuttle Twins has 1 or more "seasons" and each "season" may have as many as 12 "episodes"
-### 1. The NFT team manages a "Google Episode google_spreadsheet" for each episode in each season.  
-    a. Each row in an episode google_spreadsheet has the following columns:
-      * `S3_BASE_URL`: example: 
-        `https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/`
-      * `ROW_INDEX`: starts with 0
-      * `FRAME NUMBER`: example: `TT_S01_E01_FRM-00-00-08-12`
-      * `UNSUPERVISED CLASSIFICATION`: see `RARITY_CHOICES`
-      * `SUPERVISED CLASSIFICATION`: see `RARITY_CHOICES`
-      * `JONNY's RECLASSIFICATION`: see `RARITY_CHOICES`
-      * `METADATA`: example `[Emily, Space Tunnel, Time Machine]`  
-    b. `RARITY_CHOICES` can be one of `(Junk, Common, Uncommon, Rare, or Legendary)`
-    c. S3_BASE_URL and the FRAME NUMBER are used to compute the S3 src_url. example:
-        `https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-08-12.jpg` 
-    d `ROW_INDEX` and `METADATA` are not used for this project
+### Save data for all episodes in its season's manifest file:
+Save the "GOOGLE_SPREADSHEET_SHARE_LINK" and other properties, like "GOOGLE_SPREADSHEET_URL" in an "episode" section in that season's manifest file. Once all episodes for a given season have been updated, the season's manifest file must be manually uploaded to it location in S3. At bucket `media.angel-nft.com` and directory structure `tuttle_twins/manifests/<season_code>-episodes.json`.
 
-### 2. "Season Manifest Files" (a json file):  
-    a. A Season Manifest File defines the Episode Google Sheet used for each episode in that season.
-    b. This is a json text file that is manually created and uploaded to S3 whenever a new episode is published  
-    c. Periodic re-generated of Episode Manifest Files is directed by its Season Manifest File.  
-    d. Example:  
-      ```
-      aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | grep "-episodes.json"  
-      2022-05-04 13:36:39        962 S01-episodes.json  
-      ```
-    e. This json file consists of a list of "Episode Objects" (python dict), each with these attributes:  
-      * `season_code` a string, episode's season code, example `S01`  
-      * `episode_code`: a string, episode's episode number, example `E07`  
-      * `google_spreadsheet_title`: string title of the epiode's Google sheet  
-      * `google_spreadsheet_url`: URL, of the google spreadsheet, which can be used for editing by designated users only
-      * `google_spreadsheet_share_link` a manually created URL, that anyone can use to view the google spreadsheet  
-      * TODO remove local_manifest_jl_file attribute, since each episode has many versioned episode manifest files in S3
+## Scheduled dataset updates
+A cron schedule drives execution of the `data_preparation.py` script. This script processes each episode of each season manifest file found in the manifests directory in s3.  
 
-### 3. "Versioned Episode Manifest Files" (a file of json lines):  
+The google spreadsheet for a given episode is loaded into a dataframe. Once each image frame is randomly assigned to one of the three datasets the dataframe defines the mapping for each source jpg file to its new destination dataset folder.
 
-    a. Many Versioned Episode Manifest files are stored in S3 for a given episode.
-    b. A new Versioned Episode Manifest file is periodically re-generated from the data available in its associated Episode Google Sheet.
-    c. A newly generated Episode Manifest file is only uploaded to S3 if it differs from the previous latest version in S3
-    d. Example:
-      ```
-      (venv) ~/workspace/tuttle-twins-rarity$ aws s3 ls s3://media.angel-nft.com/tuttle_twins/manifests/ | egrep "S\d\dE\d\d-.*\.jl"  
-      2022-05-02 14:54:19    4744253 S01E01-manifest-2022-05-02T12:43:24.662714.jl  
-      2022-05-02 14:54:19    4744253 S01E01-manifest-2022-05-02T13:09:44.722111.jl  
-      ```
-### 4, "Episode Manifest Row" (a python dict):  
-    a. Each row of the Episode Manifest file describes:
-      * 'src_url`, the S3 URL of the image jpg file of a given frame
-      * `dst_key`, the S3 KEY of the copied image file
-    b. Machine Learning (ML) algorithms require that images be randomly shuffled into different folders, one for each processing stage:
-      * a random selection of 70% of all pre-classified images are copied into the "train" folder
-      * a random selection of 20% of all pre-classified images are copied into the "validate" folder
-      * a random selection of 10% of all pre-classified images are copied into the "test" folder
-    c. Example:
-    ```
-      {  "src_url": "https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/stamps/TT_S01_E01_FRM-00-00-09-00.jpg",   
-         "dst_key": "tuttle_twins/ML/train/Rare/TT_S01_E01_FRM-00-00-09-00.jpg"   } 
-    ``` 
-### 5. `create-manifests.py` (a python module):  
-    a. This python module creates an Episode Manifest File for each Episode Object defined in a Season Manifest File 
-    b. each episode google_spreadsheet is downloaded from Google Docs using google's API functions installed via its `spread` package 
-    c. google sheet processing API functions require a GOOGLE_CREDENTIALS_FILE   
-    
-### 6. `preview-manifest.ipynb` (a jupyter notebook):    
-    a. this Jupyter notebook is used to view a sampled selection of the image frames defined in a given `episode manifest file` downloaded from S3
-    b. it uses the local `plot_hist_lib/plot_image_histogram.py` module to render a given RGB image  
-    c. a "standardized" version of the image is then computed where:  
-      * each 8-bit RGB pixel is converted to a floating-point GRAYscale value
-      * pixel values are shifted so that the mean of all pixel values in the image is 0.0  
-      * pixel values are scaled so that the stddev of all pixel values in the frame is 1.0  
-    d. a histogram of the standardized image is then computed and superimposed on the RGB image  
+Recursive S3 searches are used to create a dataframe that describes all source image files for the given episode and a another dataframe that describes the location of all episode jpg files found in the target dataset directories.
 
-    NOTE: justifications for image data "normalization" by mean and stddev:  
-    * `https://becominghuman.ai/image-data-pre-processing-for-neural-networks-498289068258`   
-    * `https://stats.stackexchange.com/a/220970`   
-    * `https://towardsdatascience.com/normalization-vs-standardization-which-one-is-better-f29e043a57eb`  
+Dataset operations are used bring the destination datasets in sync with the google spreadsheet for that episode.  Dataframe operations are used to find 4 change sets:
 
-### 7. `process_manifests.py` (a python module) 
-This module copies  notebook file arranges image files into the class-sensitive directory structure required by Tensorflow image classification libraries:  
+1. All destination jpg files that are already present at its new destination dataset and do not need to be altered.  
+2. All destination jpg files that must be deleted, since it is no longer mapped from a source file.  
+3. All destination jpg files that need to be moved from one destionation dataset to another.  
+4. All source jopg files that need to be copied to a given destination dataset.  
 
+AWS Boto3 functions are used to copy and delete lists ofS3 files as needed.
+### Logging
+Each scheduled run of `tuttle-twins-data-prep.py` will be logged and tracked using AWS Cloud Watch.
+
+If a given run fails, Cloud Watch will trigger an event that causes an SMS error message be sent to operations.
+
+Tuttle Twins dataset updates are not directly consumer-facing, so immediate action need not be taken.
+
+## AWS CLI installtion:
 ```
-s3://dst-bucket/
-  dst-folder/
-    train/
-      class1/
-        s1-e1-c1-a.jpg
-        s2-e9-c1-w.jpg
-      class2/
-        s9-e1-c2-m.jpg
-        s8-q7-c2-p.jpg
-    test/
-      class1/
-        s1-e7-c1-x.jpg
-        s2-e9-c1-b.jpg
-      class2/
-        s3-e1-c2-a.jpg
-        s3-q1-c2-b.jpg
-```
-Each `episode manifest file` is used to calculate the non-class-sensitive source path and class-sensitive destination paths for image files in the cumulative dataset.  
-
-
-## Model Training:
-    
-## Model Validation:
-    
-## Error Evalution:
-    
-## Iterative tuning:
-    
-    
-## Image Frame Reclassification Notes
-Manual classification of all image frames is stored in Google Drive google_spreadsheets for each episode. New image frames can be added and old frames may be re-classified at any time.  
-    
-An automated process is needed to detect and handle these changes, that does not require engineering effort.  
-    
-At scheduled times, this process will fetch each episode manifest file and compare it with its previous timestamped version.  
-
-For each new row found, copy the new source image file to its destination.  
-    
-For each row with an altered classification, copy the source image file to its new destination and then delete it from its old location.  
-
-## Dataset Directory Structure Note:  
-Tensorflow image classification requires preparation of an image dataset in s3 with the structure described above.
-
-One way to copy millions of image files from one location to another in s3 is to copy each image individually.
-
-AWS recommends using `aws s3 cp --recursive` for large-scale batch operations on Amazon S3 objects  
-* https://docs.aws.amazon.com/AmazonS3/latest/userguide/batch-ops.html  
-
-However, this does not provide the ability to perform a specified operation per object, so there is no way to customize the class-specific destination prefix for each object.  
-
-Another approach (needs experimentation) is to use `aws s3 cp --recursive` on category-specific manifest files. It remains to be seen if the following command would work:  
-```
-  aws s3 cp --recursive \
-    s3://<src-bucket>/<src-folder>/ \
-    s3://<dst-bucket>/<dst-folder>/train/<class>  
+sudo yum update -y
+sudo yum install unzip
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
 ```
 
-## Tuttle Twins Seasons and Episodes:  
-There may be many seasons and each season has several episodes
-
-## Episode Google Sheet:  
-An Episode Google Sheet is a google_spreadsheet that contains data for thousands of frames in a single TuttleTwins Episode
-Each row describes the S3 Image URL, Frame Number, Classifications, and Tags for a given frame
-This google_spreadsheet can be manually altered by the NFT team at any time
-
-## S3 Image Url:  
-Pre-sized versions of each image frame are stored as JPG files in s3:  
-* high_res: 1920x1080 pixels
-* mid_res: 1024x576 pixels
-* low_res: 854x480 pixels
-* thumbnails: 640x360 pixels
-
-Example URL:  
-`https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-08-21.jpg`  
-
-Example S3 object query:  
-`aws s3 ls s3://media.angel-nft.com/tuttle_twins/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-08-21.jpg`  
-## Classifications:  
-### Ranks:
-The Episode Google Sheeth has Classification columns whose values may be one of 5 rankings:
-  Junk, Common, Uncommon, Rare, and Legendary  
-
-### Three Classification Columns:  
-* Unsupervised classifictions (Common, Uncommon, Rare) are done using K-Means clustering of image metrics (what image metrics?)  
-* Supervised classifications (Junk, Common, Uncommon, Rare) are entered manually (using what tagging tool?)  
-* Jonny's classifications (Legendary) are entered manually (using what tagging tool?)  
-
-
-
-
-## S3 Key Row:  
-This class describes attributes of each  row output from an 'aws s3 ls search'
+## Set up the local virtual environment:
+Use these commands to setup the local virtual environment and to install all python packages required for this project:
 ```
-Example row of outpout:
-"2022-05-03 19:15:34       2715 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"  
-
-Parsed S3 Key Row attributes:
-{ "last_modified": "2022-05-03T19:15:34", "size": 2715, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-13-19.jpg"}
+python3 -m venv venv
+source venv/bin/python (to activate the virtual environment)
+python3 -m pip install --upgrade pip
+pip install -r requirements.txt (to install all packages into your virtual environment)
 ```
+
+Use this to deactivate your virtual environment:   
+```
+deactivate 
+```
+
+## VSCode settings:
+In vscode open the Command Controller using shift-cmd-p  
+Choose "Select Python Interpreter"  
+Enter  `./venv/bin/python`  
+## Environment settings:
+The local `.env` file describes settings that are loaded by the application and used for local development.
 

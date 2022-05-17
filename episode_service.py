@@ -225,7 +225,7 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
 def log_progress(prefix, episode_id, action, num_files, num_sec, files_per_sec):
     logger.info(f"{prefix} episode_id:{episode_id} {action} - num_files:{num_files} num_sec:{num_sec} rate:{files_per_sec:.3f} files/sec")
 
-def main() -> None:
+def process_episodes() -> None:
     all_episodes = download_all_seasons_episodes()
     for episode in all_episodes:
         episode_id = episode.get_episode_id()
@@ -475,9 +475,8 @@ def test_s3_find_episode_jpg_keys_df():
 
 
 if __name__ == "__main__":
-    # test_find_google_episode_keys_df()
-    # test_s3_find_episode_jpg_keys_df()
-    main()
+    test_find_google_episode_keys_df()
+    test_s3_find_episode_jpg_keys_df()
 
     logger.info("done")
 
