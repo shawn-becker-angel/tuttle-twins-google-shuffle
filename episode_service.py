@@ -506,7 +506,7 @@ def test_find_google_episode_keys_df():
     episode_id = episode.get_episode_id()
     G = find_google_episode_keys_df(episode)
     if len(G) > 0:
-        expected = set(['episode_id', 'img_src', 'img_frame', 'new_ml_folder', 'new_ml_img_class'])
+        expected = set(['episode_id', 'img_src', 'img_frame', 'new_ml_key'])
         result = set(G.columns)
         assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
     else:
@@ -517,7 +517,7 @@ def test_s3_find_episode_jpg_keys_df():
     episode_id = episode.get_episode_id()
     C = s3_find_episode_jpg_keys_df(episode)
     if len(C) > 0:
-        expected = set(C[['episode_id', 'img_frame', 'ml_folder', 'ml_image_class']])
+        expected = set(C[['episode_id', 'img_frame', 'ml_key']])
         result = set(C.columns)
         assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
     else:
