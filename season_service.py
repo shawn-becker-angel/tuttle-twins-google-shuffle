@@ -15,38 +15,38 @@ load_dotenv()
 
 import logging
 logging.basicConfig(level = logging.INFO)
-logger = logging.getLogger("season")
+logger = logging.getLogger("season_service")
 
 # ============================================
 # season_service MODULE OVERVIEW
 #
 
-def find_all_season_s3_keys() -> List[s3_key]:
+def find_all_season_manifest_s3_keys() -> List[s3_key]:
     '''
     Use s3_utils.s3_list_files to find
     the keys of all season json files found
     under the s3 manifests directory
     e.g. S01-episodes.json
     '''
-    season_s3_keys = s3_utils.s3_list_files(
+    season_manifest_s3_keys = s3_utils.s3_list_files(
         bucket=S3_MEDIA_ANGEL_NFT_BUCKET, 
         dir=S3_MANIFESTS_DIR, 
         suffix="-episodes.json")
-    return season_s3_keys
+    return season_manifest_s3_keys
 
-def download_season_episodes(season_key: str) -> List[Episode]:
+def download_season_episodes(season_manifest_key: str) -> List[Episode]:
     '''
     Download a season json file from the s3 manifests directory
     and return a list of all Episode dicts in that season json 
     file. Return empty list if season json is not found
     '''
-    assert season_key is not None, "undefined season_key"
+    assert season_manifest_key is not None, "undefined season_manifest_key"
     episodes = []
     tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat() + ".json"
     try:
         s3_utils.s3_download_text_file(
             bucket=S3_MEDIA_ANGEL_NFT_BUCKET,
-            key=season_key,
+            key=season_manifest_key,
             dn_path=tmp_file)
 
         if os.path.exists(tmp_file):
@@ -73,9 +73,9 @@ def download_all_seasons_episodes() -> List[Episode]:
     '''
     all_episodes = []
     try:
-        season_s3_keys = find_all_season_s3_keys()
-        for season_s3_key in season_s3_keys:
-            season_episodes = download_season_episodes(season_s3_key['key'])
+        season_manifest_s3_keys = find_all_season_manifest_s3_keys()
+        for season_manifest_s3_key in season_manifest_s3_keys:
+            season_episodes = download_season_episodes(season_manifest_s3_key['key'])
             if season_episodes and len(season_episodes) > 0:
                 all_episodes.extend(season_episodes)
     except Exception as exp:
@@ -89,7 +89,7 @@ def download_all_seasons_episodes() -> List[Episode]:
 # =============================================
 
 def test_find_all_season_s3_keys():
-    all_season_s3_keys = find_all_season_s3_keys()
+    all_season_s3_keys = find_all_season_manifest_s3_keys()
     assert len(all_season_s3_keys) > 0, "ERROR: no session keys found"
 
 def test_download_all_seasons_episodes():

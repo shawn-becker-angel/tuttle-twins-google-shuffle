@@ -14,8 +14,11 @@ from botocore.exceptions import ClientError
 from time import perf_counter
 from s3_key import s3_key
 
-s3_client = boto3.client('s3')
-s3_resource = boto3.resource('s3')
+AWS_REGION = "us-east-1"
+s3_client = boto3.client('s3', region_name=AWS_REGION)
+# s3_resource = boto3.resource('s3', region_name=AWS_REGION)
+s3_resource = boto3.session.Session(region_name=AWS_REGION).resource("s3")
+
 
 import logging
 logging.basicConfig(level = logging.INFO)
@@ -33,28 +36,19 @@ def s3_log_timer_info(func):
         return result
     return wrap_func
 
-
-def s3_file_exists(bucket: str, key: str):
-    '''Return True if s3 file exists'''
-    try:
-        s3_client.head_object(Bucket=bucket, Key=key)
-        return True
-    except ClientError:
-        return False
-
-
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
     '''Return the response dict'''
 
-    assert len(src_key) > 0, f"ERROR: s3_copy_file() - src_key is undefined"
-    assert len(dst_key) > 0, f"ERROR: s3_copy_file() - dst_key is undefined"
-    
+    if logger.getEffectiveLevel() <= logging.DEBUG:
+        assert src_key is not None, f"ERROR: s3_copy_file() - src_key is undefined"
+        assert dst_key is not None, f"ERROR: s3_copy_file() - dst_key is undefined"
+
     try:
         response = s3_client.copy_object(
             CopySource={'Bucket': src_bucket, 'Key': src_key}, 
             Bucket=dst_bucket, 
             Key=dst_key
-        )
+        )            
         return response
     except ClientError as ex:
         if ex.response['Error']['Code'] == 'NoSuchKey':
@@ -119,7 +113,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
     '''
     prefix_str = "" if prefix is None else prefix + "*"
     suffix_str = "" if suffix is None else "*" + suffix
-    key_pattern_str = "" if key_pattern is None else f" | egrep \"{key_pattern}\""
+    key_pattern_str = "" if key_pattern is None else f" | egrep -e \"{key_pattern}\""
 
     s3_key_rows = []
     if verbose:
@@ -211,7 +205,7 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
         returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
         if returned_value != 0:
-            logger.warn(f"subprocess exit code:{returned_value} - returning empty list")
+            logger.warn(f"s3_ls_recursive() subprocess exit code:{returned_value}")
         
         with open(tmp_file,"r") as f:
             for line in f:
@@ -242,18 +236,12 @@ def test_s3_copy_file():
     dst_bucket = "media.angel-nft.com"
     dst_key = "tuttle_twins/ML/deleteme/test.jpg"
 
-    assert s3_file_exists(src_bucket, src_key), f"ERROR: src file does not exist"
-
     response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
     assert 'ResponseMetadata' in response, f"ERROR: no ResponseMetaData key"
     assert 'HTTPStatusCode' in response['ResponseMetadata'], f"ERROR: no HTTPStatusCode key"
     httpStatusCode = response['ResponseMetadata']['HTTPStatusCode']
     assert httpStatusCode == 200, f"ERROR: bad httpStatusCode: {httpStatusCode}"
-
-    assert s3_file_exists(dst_bucket, dst_key), f"ERROR: dst file does not exist"
     s3_delete_file(dst_bucket, dst_key)
-    assert not s3_file_exists(dst_bucket, dst_key), f"ERROR: dst file not deleted"
-
 
 def test_s3_upload_download():
     try:
@@ -300,9 +288,9 @@ def test_s3_list_files():
     assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
 
 def test_s3_ls_recursive():
-    prefix = "tuttle_twins/ML/test/Common"
-    episode_key_pattern = f"TT_S01_E01_FRM-.+\.jpg"
-    s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep \"{episode_key_pattern}\""
+    prefix = "tuttle_twins/ML"
+    episode_key_pattern = f"train/Uncommon/TT_S01_E01_FRM-.+\.jpg"
+    s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep -e \"{episode_key_pattern}\""
     keys = s3_ls_recursive(s3_uri)
     assert len(keys) > 0, "ERROR: s3_ls_recursive return zero keys"
 
