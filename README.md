@@ -1,19 +1,14 @@
-# The Tuttle Twins Rarity Estimation Project - Data Preparation    
+# The Tuttle Twins Google Shuffle repo
 ## Background:  
-The Angel Studios apps and website (https://www.angel.com) are introducing new functionality that allows users to purchase a "Non-Fungible Token" (NFT) for selected image frames from the productions that they host.  
+The Angel Studios apps and website (https://www.angel.com) are introducing new functionality that allows users to purchase a "Non-Fungible Token" (NFT) for selected image frames from the Tuttle Twins production.  Machine learning technologies are used to create a predictive model used to automatically estimate a measure of "rarity" for each movie frame. This measure is used to define the starting sell price for any given frame.  
 
-This project aims to use machine learning technologies to create a predictive model that will be used to automatically set the starting NFT sell price for a given frame of the 'Tuttle Twins' production. 
+## Google Spreadsheets
+There are a lot of image files to manage for each episode of the Tuttle Twins that have been stored in S3. At a framerate of 24 frames per second x 60 seconds per minute x about 20 minutes per episode, this results in about 28,800 frames per episode. The huge effort of managing classifications for all of these source images in S3 is managed using spreadsheets stored in Google Drive.
 
-Initial prices will be determined according to some measure of its "rarity". Rarity levels range from the highest level of "Legendary" down to lower levels of "Rare", "Uncommon", "Common", and "Trash".  
+## The Google Shuffle
+These Google Spreadsheets, organized by season and episode, are dynamic and can change without notice at any time. Images classifications and image files will change and new seasons and episodes may be added without explicit notification.  
 
-## Data Preparation  
-This project uses "image-classification" algorithms with "convolutional neural networks" (CNNs) to train a model that can be used to estimate the level of rarity for a given image frame. This requires first creating a large set (thousands or millions) of frames that have been manually assigned a "rarity" level. Multiple rarity assignments are collected from both automated and manual sources. Ultimately, only the most trusted assignment is used as the supervised rarity classification for each image frame in the training set.
-
-The CCN training process requires working with a random sampled sub-set of these pre-classified source image files.  
-
-There are a lot of image files to manage for each episode. At a framerate of 24 frames per second x 60 seconds per minute x about 20 minutes per episode, this results in about 28,800 frames per episode. The huge effort of managing supervised classifications for all of these images is managed using spreadsheets stored in Google Drive.
-
-These spreadsheets, which are organized by season and episode, are dynamic and will change without notice at any time. Images classifications and image files will change and new seasons and episodes may be added without explicit notification.  
+This project is used to prepare the input data used by "image-classification" algorithms that use "convolutional neural networks" (CNNs). Samples of the source  image files are shuffled randomly into s3 folders used for training, validation and teesting.
 
 ### JPG image files:  
 Pre-sized jpg source image files are stored in S3 under bucket `media.angel-nft.com` with directory structure `tuttle_twins/<season_code><episode_code>/default_eng/v1/frames/<img_size>`
@@ -69,7 +64,7 @@ A cron schedule drives execution of the `data_preparation.py` script. This scrip
 
 The google spreadsheet for a given episode is loaded into a dataframe. Once each image frame is randomly assigned to one of the three datasets the dataframe defines the mapping for each source jpg file to its new destination dataset folder.
 
-Recursive S3 searches are used to create a dataframe that describes all source image files for the given episode and a another dataframe that describes the location of all episode jpg files found in the target dataset directories.
+Recursive S3 searches are used to create a dataframe that describes all source image files for the given episode. Another dataframe describes the location of all episode jpg files found in the target dataset directories.
 
 Dataset operations are used bring the destination datasets in sync with the google spreadsheet for that episode.  Dataframe operations are used to find 4 change sets:
 
