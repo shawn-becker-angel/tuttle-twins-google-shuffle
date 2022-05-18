@@ -5,19 +5,25 @@ import gspread
 import os
 import time
 from time import perf_counter
-import json
+import typing
+from typing import Dict, List
 import random
 from random import choices
 import datetime
 from episode import Episode
-from s3_key import s3_key, get_s3_key_dict_list
+from file_utils import concatonate_file
+from s3_key import S3Key, get_S3Key_dict_list
 from s3_utils import s3_log_timer_info, s3_list_files, s3_ls_recursive, s3_delete_files, s3_copy_files
-from season_service import download_all_seasons_episodes
-from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR, GOOGLE_CREDENTIALS_FILE
+from season_service import download_all_seasons_episodes, find_all_season_codes
+from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR, GOOGLE_CREDENTIALS_FILE, DATA_FILES_DIR
 
 import logging
 logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger("episode_service")
+
+DATA_STAGES = ['train','test','pred']
+SUBSAMPLE = 100
+
 
 # ============================================
 # episode_service overview
@@ -29,7 +35,7 @@ logger = logging.getLogger("episode_service")
 # the S3 manifests directory, set 'episode_id' as 
 # 'season_code' + 'episode_code'
  
-# G = find_google_episode_keys_df(episode)
+# G = find_sampled_google_episode_keys_df(episode)
 # --------------------------
 # use google sheet data for episode_id to define 
 # G with columns [episode_id, img_src, img_frame, randomized new_ml_folder, manual new_ml_img_class]
@@ -73,13 +79,16 @@ logger = logging.getLogger("episode_service")
     
 def add_randomized_new_ml_folder_column(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    per a percentage-wise distribution
+    per a percentage-wise distribution for episode_service.DATA_STAGES
     '''
     percentage_distribution = [
         ("train", 0.7),
-        ("validate", 0.2),
-        ("test", 0.1)
+        ("test", 0.2),
+        ("pred", 0.1)
     ]
+    data_stages = [item[0] for item in percentage_distribution]
+    assert set(data_stages) == set(DATA_STAGES)
+
     choices = new_ml_folders = [x[0] for x in percentage_distribution]
     weights = new_percentages = [x[1] for x in percentage_distribution]
     k = len(df)
@@ -88,17 +97,14 @@ def add_randomized_new_ml_folder_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 @s3_log_timer_info
-def find_google_episode_keys_df(episode: Episode, subsample: int=200) -> pd.DataFrame:
+def find_sampled_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     '''
     Read all rows of a "google episode sheet" described in the given episode into 
-    G with columns=[episode_id, img_src, img_frame, manual new_ml_img_class]
+    dataframe G with columns=[episode_id, img_src, img_frame, manual new_ml_img_class]
     randomly sub-sample rows to keep 1 out of <subsmaple> rows, 
     then add use randomized new_ml_folder_column to define destination folders.
     '''
     episode_id = episode.get_episode_id()
-
-    assert subsample >= 1, f"ERROR: subsample must be >= 1 not {subsample}"
-    subsample = int(round(subsample))
 
     # use the google credentials file and the episode's google_spreadsheet_share_link to read
     # the raw contents of the first sheet into G
@@ -108,9 +114,10 @@ def find_google_episode_keys_df(episode: Episode, subsample: int=200) -> pd.Data
     df = pd.DataFrame(data)
     assert len(df) > 0, f"ERROR: google sheet df is empty"
     
-    # subsample to keep only 1 out of subsample rows
-    if subsample > 1:
-        df = df.sample(round(len(df) * (1.0 / subsample)))
+    # subsample to keep only 1 out of SUBSAMPLE rows
+    assert SUBSAMPLE >= 1
+    num_subsampled_rows = round(len(df) / SUBSAMPLE)
+    df = df.sample(num_subsampled_rows)
 
     # fetch the public 's3_thumbnails_base_url' from the name of column zero
     # e.g. https://s3.us-west-2.amazonaws.com/media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/
@@ -160,39 +167,60 @@ def find_google_episode_keys_df(episode: Episode, subsample: int=200) -> pd.Data
     # keep only these columns
     df = df[['episode_id', 'img_src','img_frame', 'new_ml_key']]
 
-    logger.info(f"find_google_episode_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
+    logger.info(f"find_sampled_google_episode_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
     return df
 
 
-def create_google_episode_csv_files(episode: Episode, subsample: int=200, episode_csv_files_dir: str="./csv_files") -> List[str]:
+def create_google_episode_stage_data_files(episode: Episode) -> Dict[str,str]:
     '''
-    Use the google episode keys df to create csv files for 
-    train, test and pred with columns 'file_name' and 'label'
-    Return the list of csv_files created for the given episode
+    Use the find_sampled_google_episode_keys_df to create the episode_stage_data_file
+    for each stage is (DATA_STAGES: [train, test, pred] 
+    with columns 'file_name' and 'label'
     ''' 
-    G = findgoogle_episode_keys_df(episode, subsample)
+    episode_stage_data_files = {}
+
+    G = find_sampled_google_episode_keys_df(episode)
     G = G[['img_frame', 'new_ml_key']]
 
-    # create 'file_name' column by adding ".jpg"
-    # split 'new_ml_key' on '/' to create 'label' and ' and 'csv_file;
-    # for each unique csv_file value create a csv_df with columns 
-    # 'file_name' and 'label', and save it to the csv_file.
+    # create datafile S for each stage with columns 
+    # 'file_name' and 'label', for each image row
+    # and save S to episode_stage_data_file.
 
+    # create 'file_name' column for each image row by adding ".jpg"
     G['file_name'] = G['img_frame'] + ".jpg"
-    new_ml_key_cols = ['label','folder']
-    new_ml_key_df = G['new_ml_key'].str.split('/', expand=True).rename(columns = lambda x: new_ml_key_cols[x])
-    G = pd.concat(G, new_ml_key_df, axis=1)
-    
-    episode_csv_files = []
-    folders = list(G['folder'].unique())
-    for folder in folders:
-        F = G[G['folder'] == folder]
-        F = F[['file_name','label']]
-        episode_csv_file = f"{episode_csv_files_dir} + '/' + {episode_id} + '_' + folder + '.csv'"
-        F.to_csv(episode_csv_file, header=True, index=False, line_terminator='\n')
-        episode_csv_files.append(episode_csv_file)
 
-    return episode_csv_files
+    # new_ml_key = new_ml_folder / new_img_class
+    # split 'new_ml_key' on '/' to create new 'new_ml_folder' and 'new_img_class' columns
+    # but use 'stage' instead of 'new_ml_folder'
+    # and use 'label' instead of 'new_img_class'
+    new_ml_key_cols = ['stage', 'label']
+    new_ml_key_df = G['new_ml_key'].str.split('/', expand=True).rename(columns = lambda x: new_ml_key_cols[x])
+
+    # concat the new new_ml_key_df columns to G
+    G = pd.concat([G, new_ml_key_df], axis=1)
+    
+    # verify that G has the correct set of stages
+    result = set(G['stage'].unique())
+    expected = set(DATA_STAGES)
+    assert result == expected, F"ERROR: expected stages: {expected} not {result}"
+
+    # filter on each stage to create an episode_stage_data_file
+    for stage in DATA_STAGES:
+        # S holds all rows of G with a given stage
+        S = G[G['stage'] == stage]
+
+        # keep only file_name and label
+        S = S[['file_name','label']]
+
+        # save S to episode_stage_data_file
+        episode_code = episode.get_episode_code()
+        episode_stage_data_file = f"{DATA_FILES_DIR}/{episode_code}_{stage}_data.csv"
+        S.to_csv(episode_stage_data_file, header=False, index=False, line_terminator='\n')
+
+        # update the dict of all episode_stage_data_files 
+        episode_stage_data_files[stage] = episode_stage_data_file
+
+    return episode_stage_data_files
         
 
 def split_key_in_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -253,16 +281,16 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     # example key: tuttle_twins/ML/validate/Rare/TT_S01_E01_FRM-00-00-09-01.jpg
     episode_key_pattern = f"TT_{episode.get_split_episode_id()}_FRM-.+\.jpg"
     s3_uri = f"s3://media.angel-nft.com/tuttle_twins/ML/ | egrep -e \"{episode_key_pattern}\""
-    s3_keys_list = s3_ls_recursive(s3_uri)
-    if len(s3_keys_list) == 0:
+    s3keys_list = s3_ls_recursive(s3_uri)
+    if len(s3keys_list) == 0:
         logger.info(f"episode_id:{episode_id} zero episode_jpg_keys found.")
         return pd.DataFrame()
 
-    # convert list of s3_key to list of s3_key.as_dict
-    s3_key_dict_list = get_s3_key_dict_list.__func__(s3_keys_list)
+    # convert list of S3Key to list of S3Key.as_dict
+    s3key_dict_list = get_S3Key_dict_list.__func__(s3keys_list)
 
     # create dataframe with columns ['last_modified', 'size', 'key']
-    df = pd.DataFrame(s3_key_dict_list, columns=['last_modified', 'size', 'key'])
+    df = pd.DataFrame(s3key_dict_list, columns=['last_modified', 'size', 'key'])
     
     # split df.key to add columns ['ml_key', 'img_frame', 'season_code', 'episode_code', 'episode_id']
     df = split_key_in_df(df)
@@ -290,9 +318,9 @@ def process_episode(episode: Episode) -> None:
 
     #-----------------------------
     # G is files needed at new_ml_key
-    G = find_google_episode_keys_df(episode)
+    G = find_sampled_google_episode_keys_df(episode)
     if len(G) == 0:
-        logger.info("find_google_episode_keys_df() episode_id:{episode_id} zero rows found. Skipping this episode")
+        logger.info("find_sampled_google_episode_keys_df() episode_id:{episode_id} zero rows found. Skipping this episode")
         return
     
     total_files_needed = len(G)
@@ -526,31 +554,37 @@ def process_all_episodes() -> None:
     for episode in all_episodes:
         process_episode(episode)
 
-def create_all_episode_csv_files() -> List[str]:
+def get_all_season_codes() -> List[str]:
+    all_season_codes = set()
     all_episodes = download_all_seasons_episodes()
-    # get all episodes of all season manifest files found in s3
-    all_csv_files = []
-
-    # gather all csv file each episode
     for episode in all_episodes:
-        episode_csv_files = create_google_episode_csv_files(episode=episode)
-        all_csv_files.extend(episode_csv_files)
+        all_season_codes.add(episode.get_season_code())
+    return sorted(list(all_season_codes))
+
+def create_all_stage_data_files() -> Dict[str,str]:
+    '''
+    concat the contents all episode stage files
+    into a single set of stage_data_files
+    e.g. 
+    '''
+    all_stage_data_files = {}
     
-    # concatonate the contents of 
-    folders = ['train','test','pred']
-    for folder in folders: 
-        
-        XXX read into dataframes and concat axis=1
-        
-        folder_csv_file = f"./csv_files/{folder}.csv"
-        with open (folder_csv_file, 'a') as folder_csv:
-            with open (episode_csv_file, "r") as episode_csv:
-                folder_csv.writeline(episode_csv.readline())
-        all_csv_files.append(folder_csv_file)
-    return all_csv_files
+    all_episodes = download_all_seasons_episodes()
 
+    dt = datetime.datetime.utcnow().isoformat()
 
+    # get all episodes of all season manifest files found in s3
+    for episode in all_episodes:
+        # concatonate the contents of all episode_stage_data_files by stage
+        # into stage_data_file
+        episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
+        for stage in DATA_STAGES:
+            stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_data.csv"
+            concatonate_file( src_file=episode_stage_data_files[stage], dst_file=stage_data_file)
+            all_stage_data_files[stage] = stage_data_file
 
+    return all_stage_data_files
+    
 
 # =============================================
 # TESTS
@@ -568,10 +602,10 @@ def get_test_episode():
     episode = Episode(episode_dict)
     return episode
 
-def test_find_google_episode_keys_df():
+def test_find_sampled_google_episode_keys_df():
     episode = get_test_episode()
     episode_id = episode.get_episode_id()
-    G = find_google_episode_keys_df(episode)
+    G = find_sampled_google_episode_keys_df(episode)
     if len(G) > 0:
         expected = set(['episode_id', 'img_src', 'img_frame', 'new_ml_key'])
         result = set(G.columns)
@@ -590,14 +624,23 @@ def test_s3_find_episode_jpg_keys_df():
     else:
         logger.info(f"Zero episode jpg keys found for episode_id:{episode_id}")
 
-def test_create_episode_csv_files():
+def test_create_google_episode_stage_data_files():
     episode = get_test_episode()
-    episode_csv_files = create_google_episode_csv_files(episode=episode)
+    episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
+    for stage in DATA_STAGES:
+        episode_stage_data_files[stage] is not None
+
+def test_create_all_stage_data_files():
+    result = create_all_stage_data_files()
+    assert len(result) == len(DATA_STAGES)
 
 
 if __name__ == "__main__":
-    test_find_google_episode_keys_df()
+    test_find_sampled_google_episode_keys_df()
+    test_create_google_episode_stage_data_files()
     test_s3_find_episode_jpg_keys_df()
+    test_create_all_stage_data_files()
+
 
     logger.info("done")
 

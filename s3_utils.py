@@ -12,7 +12,7 @@ from typing import List, Tuple
 import boto3
 from botocore.exceptions import ClientError
 from time import perf_counter
-from s3_key import s3_key
+from s3_key import S3Key
 
 AWS_REGION = "us-east-1"
 s3_client = boto3.client('s3', region_name=AWS_REGION)
@@ -186,15 +186,15 @@ def s3_list_file_cli():
 
 
 @s3_log_timer_info
-def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
+def s3_ls_recursive(s3_uri: str) -> List[S3Key]:
     '''
     if given <s3_uri> "s3://media.angel-nft.com/tuttle_twins/ML/"
     makes system call "aws s3 ls --recursive <s3_uri> > <tmp_file>" 
     each line in <tmp_file>, e.g.
         "2022-05-03 19:15:44       2336 tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"
-    is parsed to create an s3_key object, which can be converted to dict, e.g.
+    is parsed to create an S3Key object, which can be converted to dict, e.g.
         {"last_modified":"2022-05-03T19:15:44", "size":2336, "key":"tuttle_twins/ML/validate/Uncommon/TT_S01_E01_FRM-00-19-16-19.jpg"}
-    return the list of all s3_key as s3_key_listing
+    return the list of all S3Key as s3_key_listing
     '''
     try:
         s3_key_listing = []
@@ -209,7 +209,7 @@ def s3_ls_recursive(s3_uri: str) -> List[s3_key]:
         
         with open(tmp_file,"r") as f:
             for line in f:
-                s3_key_row = s3_key(s3_ls_line=line)
+                s3_key_row = S3Key(s3_ls_line=line)
                 s3_key_listing.append(s3_key_row)
         
         logger.info(f"s3_ls_recursive() {cmd} found:{len(s3_key_listing)}")
@@ -285,7 +285,7 @@ def test_s3_list_files():
     key_pattern = "2022-05-02"
 
     s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
-    assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero s3_key"
+    assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero S3Key"
 
 def test_s3_ls_recursive():
     prefix = "tuttle_twins/ML"

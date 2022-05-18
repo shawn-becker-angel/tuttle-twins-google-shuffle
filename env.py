@@ -20,3 +20,10 @@ LOCAL_MANIFESTS_DIR = os.getenv("LOCAL_MANIFESTS_DIR")
 # Data team.
 # See the README.md file for instructions
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
+
+# Directory for all types of episode and season data files
+# e.g. 
+# S01train.csv,  S01_test.csv,  S01_pred.csv
+# S01E01_train.csv,  S01E01_test.csv,  S01E01_pred.csv
+# S01E02_train.csv,  S01E02_test.csv,  S01E02_pred.csv
+DATA_FILES_DIR = os.getenv("DATA_FILES_DIR")
