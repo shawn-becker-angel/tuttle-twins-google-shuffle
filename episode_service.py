@@ -242,6 +242,10 @@ def create_google_episode_stage_data_files(episode: Episode) -> Dict[str,str]:
         # save S to episode_stage_data_file
         episode_code = episode.get_episode_code()
         episode_stage_data_file = f"{DATA_FILES_DIR}/{episode_code}_{stage}_{dt}_{ss}_data.csv"
+
+        if not os.path.isdir(DATA_FILES_DIR):
+            os.mkdir(DATA_FILES_DIR)
+
         S.to_csv(episode_stage_data_file, header=False, index=False, line_terminator='\n')
 
         # update the dict of all episode_stage_data_files 
