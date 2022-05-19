@@ -22,10 +22,35 @@ logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger("episode_service")
 
 DATA_STAGES = ['train','test','pred']
-SUBSAMPLE = 100
+
+_subsample_rate = 200
+
+def set_subsample_rate(rate):
+    rate = 0 if rate is None else int(rate)
+    if rate >= 1: 
+        global _subsample_rate
+        _subsample_rate = rate;
+    else:
+        logger.info(f"Invalid subsample_rate {rate} ignored.")
+    logger.info(f"subsample_rate: {_subsample_rate}")
+
+
+def get_subsample_rate():
+    return _subsample_rate
+
+_verbosity_flag = False
+
+def set_verbosity(flag :bool=False):
+    _verbosity_flag = flag;
+    logger.info(f"verbosity: {_verbosity_flag}")
+
+
+def get_verbosity() -> bool:
+    return _verbosity_flag
 
 
 # ============================================
+
 # episode_service overview
 #
 # episodes = season_service.load_all_season_episodes()
@@ -114,9 +139,8 @@ def find_sampled_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     df = pd.DataFrame(data)
     assert len(df) > 0, f"ERROR: google sheet df is empty"
     
-    # subsample to keep only 1 out of SUBSAMPLE rows
-    assert SUBSAMPLE >= 1
-    num_subsampled_rows = round(len(df) / SUBSAMPLE)
+    # subsample to keep only 1 out of <subsample_rate> rows
+    num_subsampled_rows = round(len(df) / get_subsample_rate() )
     df = df.sample(num_subsampled_rows)
 
     # fetch the public 's3_thumbnails_base_url' from the name of column zero
@@ -204,6 +228,9 @@ def create_google_episode_stage_data_files(episode: Episode) -> Dict[str,str]:
     expected = set(DATA_STAGES)
     assert result == expected, F"ERROR: expected stages: {expected} not {result}"
 
+    dt = datetime.datetime.utcnow().isoformat()
+    ss = get_subsample_rate()
+
     # filter on each stage to create an episode_stage_data_file
     for stage in DATA_STAGES:
         # S holds all rows of G with a given stage
@@ -214,7 +241,7 @@ def create_google_episode_stage_data_files(episode: Episode) -> Dict[str,str]:
 
         # save S to episode_stage_data_file
         episode_code = episode.get_episode_code()
-        episode_stage_data_file = f"{DATA_FILES_DIR}/{episode_code}_{stage}_data.csv"
+        episode_stage_data_file = f"{DATA_FILES_DIR}/{episode_code}_{stage}_{dt}_{ss}_data.csv"
         S.to_csv(episode_stage_data_file, header=False, index=False, line_terminator='\n')
 
         # update the dict of all episode_stage_data_files 
@@ -561,17 +588,26 @@ def get_all_season_codes() -> List[str]:
         all_season_codes.add(episode.get_season_code())
     return sorted(list(all_season_codes))
 
-def create_all_stage_data_files() -> Dict[str,str]:
+def create_all_stage_data_files(subsample_rate :int=100, verbosity :bool=False) -> Dict[str,str]:
     '''
+    This is the main entry point for create_date_files.py
+
     concat the contents all episode stage files
     into a single set of stage_data_files
+
+    reports information about the settings used to create the set of data files
     e.g. 
     '''
+
+    set_subsample_rate(subsample_rate)
+    set_verbosity(verbosity)
+
     all_stage_data_files = {}
     
     all_episodes = download_all_seasons_episodes()
 
     dt = datetime.datetime.utcnow().isoformat()
+    ss = get_subsample_rate()
 
     # get all episodes of all season manifest files found in s3
     for episode in all_episodes:
@@ -579,7 +615,7 @@ def create_all_stage_data_files() -> Dict[str,str]:
         # into stage_data_file
         episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
         for stage in DATA_STAGES:
-            stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_data.csv"
+            stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_{ss}_data.csv"
             concatonate_file( src_file=episode_stage_data_files[stage], dst_file=stage_data_file)
             all_stage_data_files[stage] = stage_data_file
 
