@@ -89,6 +89,7 @@ def test_concatonate_file():
 
 
 if __name__ == "__main__":
-
+    from logger_utils import set_all_info_loggers_to_debug_level
+    set_all_info_loggers_to_debug_level()
     test_concatonate_files()
     test_concatonate_file()

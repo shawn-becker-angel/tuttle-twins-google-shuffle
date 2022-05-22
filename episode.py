@@ -80,9 +80,11 @@ def test_constructor():
     }
     episode = Episode(episode_dict)
     assert episode.get_episode_id() == episode_dict['season_code'] + episode_dict['episode_code']
-    logger.info("new episode:" + json.dumps(episode.as_dict(),indent=4))
+    logger.debug("new episode:" + json.dumps(episode.as_dict(),indent=4))
 
     
 if __name__ == '__main__':
+    from logger_utils import set_all_info_loggers_to_debug_level
+    set_all_info_loggers_to_debug_level()
     test_constructor()
-    logger.info("done")
+    logger.debug("done")

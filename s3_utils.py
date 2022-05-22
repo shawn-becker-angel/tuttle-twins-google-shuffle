@@ -26,13 +26,13 @@ logger = logging.getLogger("s3_utils")
 
 def s3_log_timer_info(func):
     '''
-    decorator that shows execution time using this module's logger.info
+    decorator that shows execution time using this module's logger.debug
     '''
     def wrap_func(*args, **kwargs):
         t1 = perf_counter()
         result = func(*args, **kwargs)
         elapsed = perf_counter() - t1
-        logger.info(f"*** {func.__name__} executed in {elapsed:.6f}s ***")
+        logger.debug(f"*** {func.__name__} executed in {elapsed:.6f}s ***")
         return result
     return wrap_func
 
@@ -60,7 +60,7 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
 
 @s3_log_timer_info
 def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
-    logger.info(f"s3_copy_files() {len(src_keys)} src files to {len(dst_keys)} destinations")
+    logger.debug(f"s3_copy_files() {len(src_keys)} src files to {len(dst_keys)} destinations")
     try:
         zipped_keys = zip(src_keys, dst_keys)
         for src_key, dst_key in zipped_keys:
@@ -80,7 +80,7 @@ def s3_delete_file(bucket: str, key: str) -> None:
 
 @s3_log_timer_info
 def s3_delete_files(bucket: str, keys: List[str]) -> None:
-    logger.info(f"s3_delete_files() {len(keys)} files")
+    logger.debug(f"s3_delete_files() {len(keys)} files")
     for key in keys:
         s3_resource.Object(bucket, key).delete()
 
@@ -117,7 +117,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
 
     s3_key_rows = []
     if verbose:
-        logger.info(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}.*{suffix_str} | egrep {key_pattern_str}")
+        logger.debug(f"something like: aws s3 ls s3://{bucket}/{dir}/{prefix_str}.*{suffix_str} | egrep {key_pattern_str}")
 
     if len(dir) > 0 and not dir.endswith("/"):
         dir += "/"
@@ -142,7 +142,7 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
                     num_found += 1
     
     if verbose:
-        logger.info(f"s3_list_files() found:{len(s3_key_rows)}")
+        logger.debug(f"s3_list_files() found:{len(s3_key_rows)}")
 
     return s3_key_rows
 
@@ -201,7 +201,7 @@ def s3_ls_recursive(s3_uri: str) -> List[S3Key]:
         utc_datetime_iso = datetime.datetime.utcnow().isoformat()
         tmp_file = "/tmp/tmp-" + utc_datetime_iso
         cmd = "aws s3 ls --recursive " + s3_uri + " > " + tmp_file
-        logger.info(f"s3_ls_recursive() cmd:{cmd}")
+        logger.debug(f"s3_ls_recursive() cmd:{cmd}")
         returned_value = subprocess.call(cmd, shell=True)  # returns the exit code in unix
 
         if returned_value != 0:
@@ -212,7 +212,7 @@ def s3_ls_recursive(s3_uri: str) -> List[S3Key]:
                 s3_key_row = S3Key(s3_ls_line=line)
                 s3_key_listing.append(s3_key_row)
         
-        logger.info(f"s3_ls_recursive() {cmd} found:{len(s3_key_listing)}")
+        logger.debug(f"s3_ls_recursive() {cmd} found:{len(s3_key_listing)}")
 
         return s3_key_listing
     finally:
@@ -301,11 +301,13 @@ if __name__ == "__main__":
 
     # run tests if the only argv is this module name
     if len(sys.argv) == 1:
+        from logger_utils import set_all_info_loggers_to_debug_level
+        set_all_info_loggers_to_debug_level()
         test_s3_copy_file()
         test_s3_upload_download()
         test_s3_list_files()
         test_s3_ls_recursive()
-        logger.info("done")
+        logger.debug("done")
     
     # run s3_list_file_cli if any command line args are given
     else:

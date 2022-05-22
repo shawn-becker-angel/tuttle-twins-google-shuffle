@@ -95,7 +95,7 @@ def test_multi_lines():
     for s3key in s3keys:
         assert prefix in s3key.get_key(), "ERROR: prefix not found in key.get_key()"
         cnt += 1
-    logger.info(f"s3key.get_key() tested {cnt} s3keys")
+    logger.debug(f"s3key.get_key() tested {cnt} s3keys")
 
     # how to access a staticmethod within class
     # see https://stackoverflow.com/a/12718272/18218031
@@ -104,10 +104,12 @@ def test_multi_lines():
     for d in dicts:
         assert prefix in d['key'], "ERROR: prefix not found in d['key']"
         cnt += 1
-    logger.info(f"get_S3Key_dict_list() tested {cnt} s3keys")
+    logger.debug(f"get_S3Key_dict_list() tested {cnt} s3keys")
 
 if __name__ == '__main__':
+    from logger_utils import set_all_info_loggers_to_debug_level
+    set_all_info_loggers_to_debug_level()
     test_multi_lines()
-    logger.info("done")
+    logger.debug("done")
 
     

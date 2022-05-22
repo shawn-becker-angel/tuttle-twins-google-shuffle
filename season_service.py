@@ -4,9 +4,7 @@ import s3_utils
 import datetime
 import os
 import json
-
 from typing import List
-
 from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
 
 # use pip install python-dotenv
@@ -118,9 +116,11 @@ def test_download_all_seasons_episodes():
     assert len(all_season_episodes) > 0, "ERROR: no all_season_episodes found"
 
 if __name__ == "__main__":
+    from logger_utils import set_all_info_loggers_to_debug_level
+    set_all_info_loggers_to_debug_level()
     test_find_all_season_s3_keys()
     test_find_all_season_codes()
     test_download_all_seasons_episodes()
-    logger.info("done")
+    logger.debug("done")
     
 

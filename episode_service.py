@@ -1,25 +1,25 @@
 import pandas as pd
 import numpy as np
-import re
 import gspread
 import os
-import time
 from time import perf_counter
-import typing
+from shutil import copyfile
 from typing import Dict, List
 import random
 from random import choices
 import datetime
 from episode import Episode
 from file_utils import concatonate_file
-from s3_key import S3Key, get_S3Key_dict_list
-from s3_utils import s3_log_timer_info, s3_list_files, s3_ls_recursive, s3_delete_files, s3_copy_files
-from season_service import download_all_seasons_episodes, find_all_season_codes
-from env import S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR, LOCAL_MANIFESTS_DIR, GOOGLE_CREDENTIALS_FILE, DATA_FILES_DIR
+from s3_key import get_S3Key_dict_list
+from s3_utils import s3_log_timer_info, s3_ls_recursive, s3_delete_files, s3_copy_files
+from season_service import download_all_seasons_episodes
+from env import S3_MEDIA_ANGEL_NFT_BUCKET, GOOGLE_CREDENTIALS_FILE, DATA_FILES_DIR
 
 import logging
 logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger("episode_service")
+
+from logger_utils import set_all_info_loggers_to_debug_level
 
 DATA_STAGES = ['train','test','pred']
 
@@ -31,8 +31,8 @@ def set_subsample_rate(rate):
         global _subsample_rate
         _subsample_rate = rate;
     else:
-        logger.info(f"Invalid subsample_rate {rate} ignored.")
-    logger.info(f"subsample_rate: {_subsample_rate}")
+        logger.debug(f"Invalid subsample_rate {rate} ignored.")
+    logger.debug(f"subsample_rate: {_subsample_rate}")
 
 
 def get_subsample_rate():
@@ -42,12 +42,12 @@ _verbosity_flag = False
 
 def set_verbosity(flag :bool=False):
     _verbosity_flag = flag;
-    logger.info(f"verbosity: {_verbosity_flag}")
-
+    if _verbosity_flag:
+        set_all_info_loggers_to_debug_level()
+    logger.debug(f"verbosity: {_verbosity_flag}")
 
 def get_verbosity() -> bool:
     return _verbosity_flag
-
 
 # ============================================
 
@@ -191,7 +191,7 @@ def find_sampled_google_episode_keys_df(episode: Episode) -> pd.DataFrame:
     # keep only these columns
     df = df[['episode_id', 'img_src','img_frame', 'new_ml_key']]
 
-    logger.info(f"find_sampled_google_episode_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
+    logger.debug(f"find_sampled_google_episode_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
     return df
 
 
@@ -314,7 +314,7 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
     s3_uri = f"s3://media.angel-nft.com/tuttle_twins/ML/ | egrep -e \"{episode_key_pattern}\""
     s3keys_list = s3_ls_recursive(s3_uri)
     if len(s3keys_list) == 0:
-        logger.info(f"episode_id:{episode_id} zero episode_jpg_keys found.")
+        logger.debug(f"episode_id:{episode_id} zero episode_jpg_keys found.")
         return pd.DataFrame()
 
     # convert list of S3Key to list of S3Key.as_dict
@@ -332,11 +332,11 @@ def s3_find_episode_jpg_keys_df(episode: Episode) -> pd.DataFrame:
 
     df = df[['episode_id', 'img_frame', 'ml_key']]
     
-    logger.info(f"s3_find_episode_jpg_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
+    logger.debug(f"s3_find_episode_jpg_keys_df() episode_id:{episode_id} df.shape:{df.shape}")
     return df
 
 def log_progress(prefix, episode_id, action, num_files, num_sec, files_per_sec):
-    logger.info(f"{prefix} episode_id:{episode_id} {action} - num_files:{num_files} num_sec:{num_sec} rate:{files_per_sec:.3f} files/sec")
+    logger.debug(f"{prefix} episode_id:{episode_id} {action} - num_files:{num_files} num_sec:{num_sec} rate:{files_per_sec:.3f} files/sec")
 
 def process_episode(episode: Episode) -> None:
     '''Do everything required to process the given episode'''
@@ -351,11 +351,11 @@ def process_episode(episode: Episode) -> None:
     # G is files needed at new_ml_key
     G = find_sampled_google_episode_keys_df(episode)
     if len(G) == 0:
-        logger.info("find_sampled_google_episode_keys_df() episode_id:{episode_id} zero rows found. Skipping this episode")
+        logger.debug("find_sampled_google_episode_keys_df() episode_id:{episode_id} zero rows found. Skipping this episode")
         return
     
     total_files_needed = len(G)
-    logger.info(f">>> episode_id:{episode_id} total files needed in s3: {total_files_needed}")
+    logger.debug(f">>> episode_id:{episode_id} total files needed in s3: {total_files_needed}")
 
     expected = set(['episode_id', 'img_src', 'img_frame', 'new_ml_key'])
     result = set(G.columns)
@@ -374,8 +374,8 @@ def process_episode(episode: Episode) -> None:
     #   C should be much larger than G
     #   conversely, if C has never been loaded, then C should be zero
     #   and G should be larger than C
-    logger.info(f"len(C): {len(C)}")
-    logger.info(f"len(G): {len(G)}")
+    logger.debug(f"len(C): {len(C)}")
+    logger.debug(f"len(G): {len(G)}")
 
     #-------------------------
     # J1 maps ml_key from C that needs to be at new_ml_key from G
@@ -564,21 +564,21 @@ def process_episode(episode: Episode) -> None:
     result = set(G2.columns)
     assert result == expected, f"ERROR: expected G2.columns: {expected} not {result}"
 
-    logger.info(f"episode_id: {episode_id} num files needed in ML: {total_files_needed}")
-    logger.info(f"episode_id: {episode_id} num files deleted from ML: {num_files_deleted}")
-    logger.info(f"episode_id: {episode_id} um files moved within ML: {num_files_moved}")
-    logger.info(f"episode_id: {episode_id} num files copied from src: {num_files_copied}")
+    logger.debug(f"episode_id: {episode_id} num files needed in ML: {total_files_needed}")
+    logger.debug(f"episode_id: {episode_id} num files deleted from ML: {num_files_deleted}")
+    logger.debug(f"episode_id: {episode_id} um files moved within ML: {num_files_moved}")
+    logger.debug(f"episode_id: {episode_id} num files copied from src: {num_files_copied}")
     num_files_unchanged = total_files_needed - num_files_moved - max(num_files_deleted, num_files_copied)
-    logger.info(f"episode_id: {episode_id} num files unchanged: {num_files_unchanged}")
+    logger.debug(f"episode_id: {episode_id} num files unchanged: {num_files_unchanged}")
 
     #-----------------------------
     # assert C4 == G2
     expected = G2.shape
     result = C4.shape
     if result != expected:
-        logger.info(f"episode_id: {episode_id} final shape result: {result} != shape expected: {expected}")
+        logger.debug(f"episode_id: {episode_id} final shape result: {result} != shape expected: {expected}")
     else:
-        logger.info(f"episode_id: {episode_id} final shape result: {result} == shape expected: {expected}")
+        logger.debug(f"episode_id: {episode_id} final shape result: {result} == shape expected: {expected}")
 
 def process_all_episodes() -> None:
     all_episodes = download_all_seasons_episodes()
@@ -592,7 +592,7 @@ def get_all_season_codes() -> List[str]:
         all_season_codes.add(episode.get_season_code())
     return sorted(list(all_season_codes))
 
-def create_all_stage_data_files(subsample_rate :int=100, verbosity :bool=False) -> Dict[str,str]:
+def create_all_stage_data_files(subsample_rate :int=100, cleanup: bool=True, verbosity :bool=False) -> Dict[str,str]:
     '''
     This is the main entry point for create_date_files.py
 
@@ -600,14 +600,18 @@ def create_all_stage_data_files(subsample_rate :int=100, verbosity :bool=False) 
     into a single set of stage_data_files
 
     reports information about the settings used to create the set of data files
-    e.g. 
+    
+    if cleanup then remove all intermediate datafiles
+    
+    returns the final list of unstamped stage datafiles
     '''
 
     set_subsample_rate(subsample_rate)
     set_verbosity(verbosity)
 
-    all_stage_data_files = {}
-    
+    all_unstamped_stage_data_files = {}
+    all_stamped_stage_data_files = {}
+    all_episode_stage_data_files = []
     all_episodes = download_all_seasons_episodes()
 
     dt = datetime.datetime.utcnow().isoformat()
@@ -615,15 +619,32 @@ def create_all_stage_data_files(subsample_rate :int=100, verbosity :bool=False) 
 
     # get all episodes of all season manifest files found in s3
     for episode in all_episodes:
-        # concatonate the contents of all episode_stage_data_files by stage
-        # into stage_data_file
+        # concatonate the contents of all episode_stage_data_files by stage into all_stamped_stage_data_files
         episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
+        all_episode_stage_data_files.extend(list(episode_stage_data_files.values()))
+        logger.warning(f"*** episode_code:{episode.get_episode_code()} all_episode_stage_data_files.length: {len(all_episode_stage_data_files)}")
         for stage in DATA_STAGES:
-            stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_{ss}_data.csv"
-            concatonate_file( src_file=episode_stage_data_files[stage], dst_file=stage_data_file)
-            all_stage_data_files[stage] = stage_data_file
-
-    return all_stage_data_files
+            stamped_stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_{ss}_data.csv"
+            concatonate_file( src_file=episode_stage_data_files[stage], dst_file=stamped_stage_data_file)
+            all_stamped_stage_data_files[stage] = stamped_stage_data_file
+            
+    for stage in DATA_STAGES:
+        # copy all stamped_stage_data_file to unstamped_stage_data_file
+        stamped_stage_data_file = all_stamped_stage_data_files[stage]
+        unstamped_stage_data_file = f"{DATA_FILES_DIR}/{stage}_data.csv"
+        copyfile(stamped_stage_data_file, unstamped_stage_data_file)
+        all_unstamped_stage_data_files[stage] = unstamped_stage_data_file
+    
+    # remove all intermediate data files            
+    if cleanup:
+        logger.warning(f"*** all_episode_stage_data_files.length: {len(all_episode_stage_data_files)}")
+        for episode_stage_data_file in all_episode_stage_data_files:
+            os.remove(episode_stage_data_file)
+        for stage in DATA_STAGES:
+            os.remove(all_stamped_stage_data_files[stage])
+    
+    # return only the 'unstamped' stage data files
+    return all_unstamped_stage_data_files
     
 
 # =============================================
@@ -651,7 +672,7 @@ def test_find_sampled_google_episode_keys_df():
         result = set(G.columns)
         assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
     else:
-        logger.info(f"Zero google episode keys found for episode_id:{episode_id}")
+        logger.debug(f"Zero google episode keys found for episode_id:{episode_id}")
 
 def test_s3_find_episode_jpg_keys_df():
     episode = get_test_episode()
@@ -662,7 +683,7 @@ def test_s3_find_episode_jpg_keys_df():
         result = set(C.columns)
         assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
     else:
-        logger.info(f"Zero episode jpg keys found for episode_id:{episode_id}")
+        logger.debug(f"Zero episode jpg keys found for episode_id:{episode_id}")
 
 def test_create_google_episode_stage_data_files():
     episode = get_test_episode()
@@ -676,11 +697,12 @@ def test_create_all_stage_data_files():
 
 
 if __name__ == "__main__":
+    set_all_info_loggers_to_debug_level()
     test_find_sampled_google_episode_keys_df()
     test_create_google_episode_stage_data_files()
     test_s3_find_episode_jpg_keys_df()
     test_create_all_stage_data_files()
 
 
-    logger.info("done")
+    logger.debug("done")
 
