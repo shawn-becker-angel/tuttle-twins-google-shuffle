@@ -4,15 +4,14 @@ import argparse
 import os
 import re
 import sys
-import filecmp
 import subprocess
 import datetime
-from time import perf_counter
+from time import time, perf_counter
 from typing import List, Tuple
 import boto3
 from botocore.exceptions import ClientError
-from time import perf_counter
 from s3_key import S3Key
+from file_utils import generate_big_random_bin_file, compare_big_bin_files
 
 AWS_REGION = "us-east-1"
 s3_client = boto3.client('s3', region_name=AWS_REGION)
@@ -37,8 +36,10 @@ def s3_log_timer_info(func):
     return wrap_func
 
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
-    '''Return the response dict'''
-
+    '''
+    Copy a single s3 src object to s3 dst object
+    Return the response dict
+    '''
     if logger.getEffectiveLevel() <= logging.DEBUG:
         assert src_key is not None, f"ERROR: s3_copy_file() - src_key is undefined"
         assert dst_key is not None, f"ERROR: s3_copy_file() - dst_key is undefined"
@@ -60,6 +61,9 @@ def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -
 
 @s3_log_timer_info
 def s3_copy_files(src_bucket:str, src_keys: List[str], dst_bucket: str, dst_keys: List[str])-> None:
+    '''
+    Copy a list of s3 src objects to s3 dst objects
+    '''
     logger.debug(f"s3_copy_files() {len(src_keys)} src files to {len(dst_keys)} destinations")
     try:
         zipped_keys = zip(src_keys, dst_keys)
@@ -85,7 +89,7 @@ def s3_delete_files(bucket: str, keys: List[str]) -> None:
         s3_resource.Object(bucket, key).delete()
 
 
-def s3_upload_text_file(up_path: str, bucket: str, channel: str):
+def s3_upload_file(up_path: str, bucket: str, channel: str):
     '''
     upload a text file to at up_path to s3
     '''
@@ -95,7 +99,7 @@ def s3_upload_text_file(up_path: str, bucket: str, channel: str):
     s3_resource.Bucket(bucket).put_object(Key=key, Body=data)
 
 
-def s3_download_text_file(bucket: str, key: str, dn_path: str):
+def s3_download_file(bucket: str, key: str, dn_path: str):
     '''
     download a text file from s3 into dn_path
     '''
@@ -109,7 +113,7 @@ def s3_download_text_file(bucket: str, key: str, dn_path: str):
 @s3_log_timer_info
 def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key_pattern: str=None, verbose: bool=False) -> List[dict]:
     '''
-    returns a list of s3_key describing s3 object that match the given search criteria
+    returns a list of dict(data_modified, size and key) describing s3 object's that match the given search criteria
     '''
     prefix_str = "" if prefix is None else prefix + "*"
     suffix_str = "" if suffix is None else "*" + suffix
@@ -243,33 +247,29 @@ def test_s3_copy_file():
     assert httpStatusCode == 200, f"ERROR: bad httpStatusCode: {httpStatusCode}"
     s3_delete_file(dst_bucket, dst_key)
 
-def test_s3_upload_download():
-    try:
-        tmp_dir = "/tmp"
-        test_up_path = os.path.join(tmp_dir, "test_up.txt")
-        test_dn_path = os.path.join(tmp_dir, "test_dn.txt")
+def test_s3_upload_download_10Mbyte_binary_file():
+    Mbytes = 10
+    bytes = round(Mbytes * 1024 * 1024)
+    test_up_filename = f"test-up-file-{round(time() * 1000)}"
+    test_dn_filename = f"test-dn-file-{round(time() * 1000)}"
+    test_up_file = "/tmp/" + test_up_filename
+    test_dn_file = "/tmp/" + test_dn_filename
 
-        with open(test_up_path, "w") as f:
-            f.write("HOWDY\n")
+    generate_big_random_bin_file(filename=test_up_file, size=bytes)
 
-        bucket = "media.angel-nft.com"
-        channel = "tuttle_twins/manifests"
+    bucket = "media.angel-nft.com"
+    channel = "tuttle_twins/manifests"
 
-        s3_upload_text_file(up_path=test_up_path, bucket=bucket, channel=channel)
+    s3_upload_file(up_path=test_up_file, bucket=bucket, channel=channel)
 
-        up_file = os.path.basename(test_up_path)
-        key = f"{channel}/{up_file}"
-        s3_download_text_file(bucket=bucket, key=key, dn_path=test_dn_path)
+    key = f"{channel}/{test_up_filename}"
+    s3_download_file(bucket=bucket, key=key, dn_path=test_dn_file)
+    s3_delete_file(bucket=bucket, key=key)
 
-        # deep comparison
-        result = filecmp.cmp(test_up_path, test_dn_path, shallow=False)
-        assert result == True, "ERROR: up/dn files are not the same"
+    assert compare_big_bin_files(test_up_file, test_dn_file) == True
 
-    finally:
-        if os.path.exists(test_up_path):
-            os.remove(test_up_path)
-        if os.path.exists(test_dn_path):
-            os.remove(test_dn_path)
+    os.remove(test_up_file)
+    os.remove(test_dn_file)
 
 
 def test_s3_list_files():
@@ -304,7 +304,7 @@ if __name__ == "__main__":
         from logger_utils import set_all_info_loggers_to_debug_level
         set_all_info_loggers_to_debug_level()
         test_s3_copy_file()
-        test_s3_upload_download()
+        test_s3_upload_download_10Mbyte_binary_file()
         test_s3_list_files()
         test_s3_ls_recursive()
         logger.debug("done")

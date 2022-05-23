@@ -44,7 +44,7 @@ def download_season_episodes(season_manifest_key: str) -> List[Episode]:
     episodes = []
     tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat() + ".json"
     try:
-        s3_utils.s3_download_text_file(
+        s3_utils.s3_download_file(
             bucket=S3_MEDIA_ANGEL_NFT_BUCKET,
             key=season_manifest_key,
             dn_path=tmp_file)
