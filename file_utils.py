@@ -1,13 +1,11 @@
 # see https://stackoverflow.com/a/35805441/18218031
 
-import os
-import time
 from typing import List
-import random
 
 import logging
 logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger("file_utils")
+
 
 def concatonate_files(src_files: List[str], dst_file: str):
     '''Creates dst_file if needed'''

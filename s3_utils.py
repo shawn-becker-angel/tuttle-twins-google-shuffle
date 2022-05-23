@@ -11,7 +11,7 @@ from typing import List
 import boto3
 from botocore.exceptions import ClientError
 from s3_key import S3Key
-from file_utils import generate_big_random_bin_file, compare_big_bin_files
+from typing import List, Dict
 
 AWS_REGION = "us-east-1"
 s3_client = boto3.client('s3', region_name=AWS_REGION)
@@ -33,6 +33,57 @@ def s3_log_timer_info(func):
         logger.debug(f"*** {func.__name__} executed in {elapsed:.6f}s ***")
         return result
     return wrap_func
+
+def find_existing_file_names(folder: str) -> List[str]:
+    existing_items = os.listdir(folder)
+    existing_file_names = [item for item in existing_items if os.path.isfile(os.path.join(folder, item))]
+    return existing_file_names
+
+@s3_log_timer_info
+def s3_sync_download_files(src_bucket: str, src_keys: List[str], dst_folder: str) -> Dict[str,int]:
+    '''
+    Create required dst_file_names from required src_keys
+    download missing src_keys to dst_files
+    remove dst_files that not required
+    verify existing file_names match required_file_names if logger level is DEBUG
+    Return a dict of num_downloaded and num_removed
+    '''
+    
+    # download missing files from s3
+    num_downloaded = 0
+    for src_key in src_keys:
+        file_name = os.path.basename(src_key)
+        dst_file = os.path.join(dst_folder, file_name)
+        if not os.path.isfile(dst_file):
+            s3_download_file(bucket=src_bucket, key=src_key, dn_path=dst_file)
+            num_downloaded += 1
+    
+    # convert src_keys to required file_names
+    required_file_names = [os.path.basename(src_key) for src_key in src_keys]
+
+    # find existing dst file_names
+    existing_dst_file_names = find_existing_file_names(dst_folder)
+    
+    # remove unused = existing - required
+    unused_dst_file_names = list(set(existing_dst_file_names) - set(required_file_names))
+    num_removed = 0
+    for dst_file_name in unused_dst_file_names:
+        dst_file = os.path.join(dst_folder, dst_file_name)
+        os.remove(dst_file)
+        num_removed += 1
+        
+    # verify = True if logger.getEffectiveLevel() == logging.DEBUG else False
+    verify = True
+    if verify:
+        # verify existing dst keys == required src keys
+        existing_dst_file_names = find_existing_file_names(dst_folder)
+        assert len(set(required_file_names) - set(existing_dst_file_names)) == 0
+    
+    return {
+        "num_downloaded": num_downloaded,
+        "num_removed": num_removed
+    }
+            
 
 def s3_copy_file(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> dict:
     '''

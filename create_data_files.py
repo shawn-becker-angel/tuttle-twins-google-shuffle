@@ -5,20 +5,20 @@ logger = logging.getLogger("create_data_files")
 import argparse
 from episode_service import create_all_stage_data_files
 
-from env import DATA_FILES_DIR, S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
+from env import LOCAL_DATA_FILES_DIR, S3_MEDIA_ANGEL_NFT_BUCKET, S3_MANIFESTS_DIR
 
 def main():
     '''
     calls episode_service.create_all_stage_data_files() using command 
     line arguments.
-    create_all_stage_data_files reports stats about the newly created data files
     '''
     example = """
-    python create_data_files.py --subsample 100
+    activate
+    python create_data_files.py --subsample 200
     """
 
     parser = argparse.ArgumentParser(
-        description=f"Create shuffled google data files in '{DATA_FILES_DIR}/' for all season manifest json files found under 's3://{S3_MEDIA_ANGEL_NFT_BUCKET}/{S3_MANIFESTS_DIR}'", 
+        description=f"Create shuffled google data files in '{LOCAL_DATA_FILES_DIR}/' for all season manifest json files found under 's3://{S3_MEDIA_ANGEL_NFT_BUCKET}/{S3_MANIFESTS_DIR}'", 
         usage=f"--help/-h [--subsample <pos int>] [--cleanup] [--verbose]")
     parser.add_argument(
         '--subsample', default=100, 

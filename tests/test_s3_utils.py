@@ -4,8 +4,10 @@
 import unittest
 
 from s3_utils import *
+from file_utils import generate_big_random_bin_file, compare_big_bin_files
 
 class TestS3UtilMethods(unittest.TestCase):
+    
         
     def test_s3_copy_file(self):
         '''

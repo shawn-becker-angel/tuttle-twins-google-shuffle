@@ -9,11 +9,11 @@ import random
 from random import choices
 import datetime
 from episode import Episode
-from file_utils import concatonate_file
+from file_utils import concatonate_file, concatonate_files
 from s3_key import get_S3Key_dict_list
 from s3_utils import s3_log_timer_info, s3_ls_recursive, s3_delete_files, s3_copy_files
 from season_service import download_all_seasons_episodes
-from env import S3_MEDIA_ANGEL_NFT_BUCKET, GOOGLE_CREDENTIALS_FILE, DATA_FILES_DIR
+from env import S3_MEDIA_ANGEL_NFT_BUCKET, GOOGLE_CREDENTIALS_FILE, LOCAL_DATA_FILES_DIR
 
 import logging
 logging.basicConfig(level = logging.INFO)
@@ -241,10 +241,10 @@ def create_google_episode_stage_data_files(episode: Episode) -> Dict[str,str]:
 
         # save S to episode_stage_data_file
         episode_code = episode.get_episode_code()
-        episode_stage_data_file = f"{DATA_FILES_DIR}/{episode_code}_{stage}_{dt}_{ss}_data.csv"
+        episode_stage_data_file = f"{LOCAL_DATA_FILES_DIR}/{episode_code}_{stage}_{dt}_{ss}_data.csv"
 
-        if not os.path.isdir(DATA_FILES_DIR):
-            os.mkdir(DATA_FILES_DIR)
+        if not os.path.isdir(LOCAL_DATA_FILES_DIR):
+            os.mkdir(LOCAL_DATA_FILES_DIR)
 
         S.to_csv(episode_stage_data_file, header=False, index=False, line_terminator='\n')
 
@@ -623,14 +623,14 @@ def create_all_stage_data_files(subsample_rate :int=100, cleanup: bool=True, ver
         episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
         all_episode_stage_data_files.extend(list(episode_stage_data_files.values()))
         for stage in DATA_STAGES:
-            stamped_stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_{ss}_data.csv"
+            stamped_stage_data_file = f"{LOCAL_DATA_FILES_DIR}/{stage}_{dt}_{ss}_data.csv"
             concatonate_file( src_file=episode_stage_data_files[stage], dst_file=stamped_stage_data_file)
             all_stamped_stage_data_files[stage] = stamped_stage_data_file
             
     for stage in DATA_STAGES:
         # copy all stamped_stage_data_file to unstamped_stage_data_file
         stamped_stage_data_file = all_stamped_stage_data_files[stage]
-        unstamped_stage_data_file = f"{DATA_FILES_DIR}/{stage}_data.csv"
+        unstamped_stage_data_file = f"{LOCAL_DATA_FILES_DIR}/{stage}_data.csv"
         copyfile(stamped_stage_data_file, unstamped_stage_data_file)
         all_unstamped_stage_data_files[stage] = unstamped_stage_data_file
     
@@ -643,6 +643,29 @@ def create_all_stage_data_files(subsample_rate :int=100, cleanup: bool=True, ver
     
     # return only the 'unstamped' stage data files
     return all_unstamped_stage_data_files
+
+
+def get_file_names_from_all_stage_data_files():
+    '''
+    Get the list of all file_names that need to be synced from s3 to a 
+    local directory where they can be used for ML alogorithms.
+    
+    Return the combined list of all 'file_name' column values 
+    from all existing stage_data_files under LOCAL_DATA_FILES_DIR.
+
+    e.g. pred_data.csv, test_data.csv, train_data.csv
+    '''
+    expected_stage_data_file_names = [stage + "_data.csv" for stage in DATA_STAGES]
+    existing_paths = os.listdir(LOCAL_DATA_FILES_DIR)
+    existing_file_names = [os.path.basename(path) for path in existing_paths if os.path.isfile(os.path.join(LOCAL_DATA_FILES_DIR,path))]
+    existing_stage_data_file_names = list(set(expected_stage_data_file_names).intersection(set(existing_file_names)))
+    existing_stage_data_files = [os.path.join(LOCAL_DATA_FILES_DIR, file_name) for file_name in existing_stage_data_file_names]
+    tmp_file = "/tmp/tmp-" + datetime.datetime.utcnow().isoformat()
+    concatonate_files(existing_stage_data_files, tmp_file)
+    df = pd.read_csv(tmp_file, header=None, names=['file_name', 'label'])
+    file_names = df['file_name'].to_list()
+    os.remove(tmp_file)
+    return file_names    
     
 
 if __name__ == "__main__":
