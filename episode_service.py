@@ -622,7 +622,6 @@ def create_all_stage_data_files(subsample_rate :int=100, cleanup: bool=True, ver
         # concatonate the contents of all episode_stage_data_files by stage into all_stamped_stage_data_files
         episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
         all_episode_stage_data_files.extend(list(episode_stage_data_files.values()))
-        logger.warning(f"*** episode_code:{episode.get_episode_code()} all_episode_stage_data_files.length: {len(all_episode_stage_data_files)}")
         for stage in DATA_STAGES:
             stamped_stage_data_file = f"{DATA_FILES_DIR}/{stage}_{dt}_{ss}_data.csv"
             concatonate_file( src_file=episode_stage_data_files[stage], dst_file=stamped_stage_data_file)
@@ -637,7 +636,6 @@ def create_all_stage_data_files(subsample_rate :int=100, cleanup: bool=True, ver
     
     # remove all intermediate data files            
     if cleanup:
-        logger.warning(f"*** all_episode_stage_data_files.length: {len(all_episode_stage_data_files)}")
         for episode_stage_data_file in all_episode_stage_data_files:
             os.remove(episode_stage_data_file)
         for stage in DATA_STAGES:
@@ -647,62 +645,6 @@ def create_all_stage_data_files(subsample_rate :int=100, cleanup: bool=True, ver
     return all_unstamped_stage_data_files
     
 
-# =============================================
-# TESTS
-# =============================================
-
-def get_test_episode():
-    episode_dict = {
-        "season_code": "S01",
-        "episode_code": "E02",
-        "google_spreadsheet_title": "Tuttle Twins S01E02 Unsupervised Clustering",
-        "google_spreadsheet_url": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit#gid=1690818184",
-        "google_spreadsheet_share_link": "https://docs.google.com/spreadsheets/d/1v40TwUEphfX174xbAE-L3ORKqRz7S_jKeSeilibnkqQ/edit?usp=sharing"
-    }
-
-    episode = Episode(episode_dict)
-    return episode
-
-def test_find_sampled_google_episode_keys_df():
-    episode = get_test_episode()
-    episode_id = episode.get_episode_id()
-    G = find_sampled_google_episode_keys_df(episode)
-    if len(G) > 0:
-        expected = set(['episode_id', 'img_src', 'img_frame', 'new_ml_key'])
-        result = set(G.columns)
-        assert result == expected, f"ERROR: expected G.columns: {expected} not {result}"
-    else:
-        logger.debug(f"Zero google episode keys found for episode_id:{episode_id}")
-
-def test_s3_find_episode_jpg_keys_df():
-    episode = get_test_episode()
-    episode_id = episode.get_episode_id()
-    C = s3_find_episode_jpg_keys_df(episode)
-    if len(C) > 0:
-        expected = set(C[['episode_id', 'img_frame', 'ml_key']])
-        result = set(C.columns)
-        assert result == expected, f"ERROR: expected C.columns: {expected} not {result}"
-    else:
-        logger.debug(f"Zero episode jpg keys found for episode_id:{episode_id}")
-
-def test_create_google_episode_stage_data_files():
-    episode = get_test_episode()
-    episode_stage_data_files = create_google_episode_stage_data_files(episode=episode)
-    for stage in DATA_STAGES:
-        episode_stage_data_files[stage] is not None
-
-def test_create_all_stage_data_files():
-    result = create_all_stage_data_files()
-    assert len(result) == len(DATA_STAGES)
-
-
 if __name__ == "__main__":
-    set_all_info_loggers_to_debug_level()
-    test_find_sampled_google_episode_keys_df()
-    test_create_google_episode_stage_data_files()
-    test_s3_find_episode_jpg_keys_df()
-    test_create_all_stage_data_files()
-
-
-    logger.debug("done")
+    logger.info("done")
 

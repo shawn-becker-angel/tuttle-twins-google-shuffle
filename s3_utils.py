@@ -7,7 +7,7 @@ import sys
 import subprocess
 import datetime
 from time import time, perf_counter
-from typing import List, Tuple
+from typing import List
 import boto3
 from botocore.exceptions import ClientError
 from s3_key import S3Key
@@ -17,7 +17,6 @@ AWS_REGION = "us-east-1"
 s3_client = boto3.client('s3', region_name=AWS_REGION)
 # s3_resource = boto3.resource('s3', region_name=AWS_REGION)
 s3_resource = boto3.session.Session(region_name=AWS_REGION).resource("s3")
-
 
 import logging
 logging.basicConfig(level = logging.INFO)
@@ -150,45 +149,6 @@ def s3_list_files(bucket: str, dir: str, prefix: str=None, suffix: str=None, key
 
     return s3_key_rows
 
-
-@s3_log_timer_info
-def s3_list_file_cli():
-    '''
-    call s3_lis= t_files() using command line arguments
-    returns the number of files in S3 that match the given search criteria
-    '''
-    example = """
-    python s3_utils media.angel-nft.com tuttle_twins/manifests --suffix .jl
-
-    implements aws s3 ls s3://<bucket>/<dir>/[<prefix>]*[<suffix>]
-    """
-    parser = argparse.ArgumentParser(description='List files in S3.', usage=f"--help/-h <bucket> <dir> [--prefix <prefix>] [--suffix <suffix>]\nexample: {example}")
-    parser.add_argument('bucket', 
-                        help='an s3 bucket')
-    parser.add_argument('dir', 
-                        help='an s3 dir/ (or dir/dir/)')
-    parser.add_argument('--prefix', metavar="<prefix>",
-                        help='an optional filename prefix')
-    parser.add_argument('--suffix', metavar="<suffix>",
-                        help='an optional filename suffix')
-    parser.add_argument('--key_pattern', metavar="<key_pattern>",
-                        help='an optional regex key pattern')
-    parser.add_argument("--verbose", "-v", help="increase output verbosity",
-                        action="store_true")
-
-    args = vars(parser.parse_args())
-
-    bucket = args['bucket']
-    dir =  args['dir']
-    prefix = args['prefix']
-    suffix = args['suffix']
-    key_pattern = args['key_pattern']
-    verbose = args['verbose']
-
-    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=verbose)
-    return len(s3_key_rows)
-
-
 @s3_log_timer_info
 def s3_ls_recursive(s3_uri: str) -> List[S3Key]:
     '''
@@ -224,91 +184,70 @@ def s3_ls_recursive(s3_uri: str) -> List[S3Key]:
             os.remove(tmp_file)
 
     
-
-###################################################
-# TESTS
-###################################################
+def parse_args(args):
     
-def test_s3_copy_file():
+    example = """
+    python s3_utils.py media.angel-nft.com tuttle_twins/manifests --suffix .jl
+
+    implements aws s3 ls s3://<bucket>/<dir>/[<prefix>]*[<suffix>]
+    """
+    parser = argparse.ArgumentParser(
+        description='List files in S3.', 
+        usage=f"--help/-h <bucket> <dir> [--prefix <prefix>] [--suffix <suffix>]\nexample: {example}")
+    
+    parser.add_argument('bucket', 
+                        help='an s3 bucket')
+    parser.add_argument('dir', 
+                        help='an s3 dir/ (or dir/dir/)')
+    parser.add_argument('--prefix', metavar="<prefix>",
+                        help='an optional filename prefix')
+    parser.add_argument('--suffix', metavar="<suffix>",
+                        help='an optional filename suffix')
+    parser.add_argument('--key_pattern', metavar="<key_pattern>",
+                        help='an optional regex key pattern')
+    parser.add_argument("--verbose", "-v", help="increase output verbosity",
+                        action="store_true")
+    try:
+        return parser.parse_args(args)
+    except Exception as exp:
+        logger.error(f"{type(exp)} {str(exp)}")
+
+
+def s3_list_file_cli(argv: List[str]) -> List[dict]:
     '''
-    "src_url": "s3://media.angel-nft.com/tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-00-03.jpg", 
-    "src_key": "tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-00-03.jpg", 
-    "dst_key": "tuttle_twins/ML/deleteme/test.jpg"
+    call s3_list_files() using command line arguments
+    returns the number of files in S3 that match the given search criteria
     '''
-    src_bucket = "media.angel-nft.com"
-    src_key = "tuttle_twins/s01e01/default_eng/v1/frames/thumbnails/TT_S01_E01_FRM-00-00-00-03.jpg"
-    dst_bucket = "media.angel-nft.com"
-    dst_key = "tuttle_twins/ML/deleteme/test.jpg"
 
-    response = s3_copy_file(src_bucket, src_key, dst_bucket, dst_key)
-    assert 'ResponseMetadata' in response, f"ERROR: no ResponseMetaData key"
-    assert 'HTTPStatusCode' in response['ResponseMetadata'], f"ERROR: no HTTPStatusCode key"
-    httpStatusCode = response['ResponseMetadata']['HTTPStatusCode']
-    assert httpStatusCode == 200, f"ERROR: bad httpStatusCode: {httpStatusCode}"
-    s3_delete_file(dst_bucket, dst_key)
+    parser = parse_args(argv[1:])
+    args = vars(parser)
 
-def test_s3_upload_download_10Mbyte_binary_file():
-    Mbytes = 10
-    bytes = round(Mbytes * 1024 * 1024)
-    test_up_filename = f"test-up-file-{round(time() * 1000)}"
-    test_dn_filename = f"test-dn-file-{round(time() * 1000)}"
-    test_up_file = "/tmp/" + test_up_filename
-    test_dn_file = "/tmp/" + test_dn_filename
+    bucket = args['bucket']
+    dir =  args['dir']
+    prefix = args['prefix']
+    suffix = args['suffix']
+    key_pattern = args['key_pattern']
+    verbose = args['verbose']
+    
+    logger.debug(f"bucket: {bucket}")
+    logger.debug(f"dir: {dir}")
+    logger.debug(f"prefix: {prefix}")
+    logger.debug(f"suffix: {suffix}")
+    logger.debug(f"key_pattern: {key_pattern}")
+    logger.debug(f"verbose: {verbose}")
 
-    generate_big_random_bin_file(filename=test_up_file, size=bytes)
+    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=verbose)
+    
+    num_keys = len(s3_key_rows)
+    print(f"found {num_keys} files")
 
-    bucket = "media.angel-nft.com"
-    channel = "tuttle_twins/manifests"
+    if num_keys < 10: 
+        for s3_key_row in s3_key_rows:
+            print(f" {s3_key_row['key']}\t{s3_key_row['size']} bytes\t{s3_key_row['last_modified'].isoformat()}")
+    
+    return s3_key_rows
 
-    s3_upload_file(up_path=test_up_file, bucket=bucket, channel=channel)
-
-    key = f"{channel}/{test_up_filename}"
-    s3_download_file(bucket=bucket, key=key, dn_path=test_dn_file)
-    s3_delete_file(bucket=bucket, key=key)
-
-    assert compare_big_bin_files(test_up_file, test_dn_file) == True
-
-    os.remove(test_up_file)
-    os.remove(test_dn_file)
-
-
-def test_s3_list_files():
-    '''
-    test s3_list_files using hard-coded values
-    NOTE: this will fail if the following S3 URI is not found 
-    s3://media.angel-nft.com/tuttle_twins/manifests/S01E01-manifest-2022-05-02T12:43:24.662714.jl
-    '''
-    bucket = "media.angel-nft.com"
-    dir = "tuttle_twins/manifests"
-    prefix = "S01E01-manifest"
-    suffix = ".jl"
-    key_pattern = "2022-05-02"
-
-    s3_key_rows = s3_list_files(bucket=bucket, dir=dir, prefix=prefix, suffix=suffix, key_pattern=key_pattern, verbose=True)
-    assert len(s3_key_rows) > 0, "ERROR: s3_list_files returned zero S3Key"
-
-def test_s3_ls_recursive():
-    prefix = "tuttle_twins/ML"
-    episode_key_pattern = f"train/Uncommon/TT_S01_E01_FRM-.+\.jpg"
-    s3_uri = f"s3://media.angel-nft.com/{prefix}/ | egrep -e \"{episode_key_pattern}\""
-    keys = s3_ls_recursive(s3_uri)
-    assert len(keys) > 0, "ERROR: s3_ls_recursive return zero keys"
-
-    for key in keys:
-        assert prefix in key.get_key(), "ERROR: prefix not found in key.get_key()"
 
 if __name__ == "__main__":
+    s3_list_file_cli(sys.argv)
 
-    # run tests if the only argv is this module name
-    if len(sys.argv) == 1:
-        from logger_utils import set_all_info_loggers_to_debug_level
-        set_all_info_loggers_to_debug_level()
-        test_s3_copy_file()
-        test_s3_upload_download_10Mbyte_binary_file()
-        test_s3_list_files()
-        test_s3_ls_recursive()
-        logger.debug("done")
-    
-    # run s3_list_file_cli if any command line args are given
-    else:
-        s3_list_file_cli()

@@ -99,28 +99,7 @@ def find_all_season_codes() -> List[str]:
     return sorted(all_season_codes)
 
 
-# =============================================
-# TESTS
-# =============================================
-
-def test_find_all_season_s3_keys():
-    all_season_s3_keys = find_all_season_manifest_s3_keys()
-    assert len(all_season_s3_keys) > 0, "ERROR: no session keys found"
-
-def test_find_all_season_codes():
-    all_season_codes = find_all_season_codes()
-    assert len(all_season_codes) > 0, "ERROR: no season codes found"
-
-def test_download_all_seasons_episodes():
-    all_season_episodes = download_all_seasons_episodes()
-    assert len(all_season_episodes) > 0, "ERROR: no all_season_episodes found"
-
 if __name__ == "__main__":
-    from logger_utils import set_all_info_loggers_to_debug_level
-    set_all_info_loggers_to_debug_level()
-    test_find_all_season_s3_keys()
-    test_find_all_season_codes()
-    test_download_all_seasons_episodes()
-    logger.debug("done")
+    logger.info("done")
     
 

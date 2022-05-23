@@ -24,7 +24,7 @@ class Episode:
             self.google_spreadsheet_share_link = self.get_dict_value(input_dict,'google_spreadsheet_share_link')
             self.episode_id = self.season_code + self.episode_code
         except Exception as exp:
-            print(type(exp), str(exp))
+            log.error(type(exp), str(exp))
             raise
     
     def get_dict_value(self, input_dict: dict, key: str) -> str:
