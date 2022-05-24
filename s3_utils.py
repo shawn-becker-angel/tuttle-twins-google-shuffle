@@ -155,9 +155,12 @@ def s3_download_file(bucket: str, key: str, dn_path: str):
     '''
     try:
         s3_resource.Bucket(bucket).download_file(key, dn_path)
-    except Exception as exp:
-        logger.error(type(exp), str(exp))
-        raise
+    except Exception as e:
+        if e.response['Error']['Code'] == "404":
+            print("The object does not exist.")
+        else:
+            logger.error(type(e), str(e))
+            raise
 
 
 @s3_log_timer_info
