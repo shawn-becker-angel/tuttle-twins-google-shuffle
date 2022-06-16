@@ -16,12 +16,12 @@ def main():
     activate
     python create_data_files.py --subsample 200
     """
-
+    ss = 100
     parser = argparse.ArgumentParser(
         description=f"Create shuffled google data files in '{LOCAL_DATA_FILES_DIR}/' for all season manifest json files found under 's3://{S3_MEDIA_ANGEL_NFT_BUCKET}/{S3_MANIFESTS_DIR}'", 
-        usage=f"--help/-h [--subsample <pos int>] [--cleanup] [--verbose]")
+        usage=f"--help/-h [--subsample <pos int> default {ss}] [--cleanup] [--verbose]")
     parser.add_argument(
-        '--subsample', default=100, 
+        '--subsample', default=ss, 
         metavar="<subsample>",
         help='an optional subsample rate')
     parser.add_argument(
